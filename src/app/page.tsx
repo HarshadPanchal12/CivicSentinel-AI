@@ -1,65 +1,201 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { ArrowRight, Sparkles } from 'lucide-react';
+import Navbar from '@/components/landing/Navbar';
+import FeatureCards from '@/components/landing/FeatureCards';
+import StatsCounter from '@/components/landing/StatsCounter';
+import HowItWorks from '@/components/landing/HowItWorks';
+import ArchitectureSection from '@/components/landing/ArchitectureSection';
+import Footer from '@/components/landing/Footer';
+
+// Dynamic import for Three.js (client-only, no SSR)
+const Globe = dynamic(() => import('@/components/landing/Globe'), { ssr: false });
+
+export default function LandingPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <>
+      <Navbar />
+
+      {/* ==================== HERO SECTION ==================== */}
+      <section style={{
+        position: 'relative',
+        height: '100vh',
+        minHeight: '700px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      }}>
+        {/* Background gradient orbs */}
+        <div style={{
+          position: 'absolute',
+          top: '10%',
+          left: '15%',
+          width: '500px',
+          height: '500px',
+          background: 'radial-gradient(circle, rgba(0, 212, 255, 0.08) 0%, transparent 70%)',
+          borderRadius: '50%',
+          pointerEvents: 'none',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '10%',
+          right: '10%',
+          width: '400px',
+          height: '400px',
+          background: 'radial-gradient(circle, rgba(168, 85, 247, 0.06) 0%, transparent 70%)',
+          borderRadius: '50%',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Three.js Globe */}
+        <Globe />
+
+        {/* Hero Content Overlay */}
+        <div style={{
+          position: 'relative',
+          zIndex: 10,
+          textAlign: 'center',
+          maxWidth: '800px',
+          padding: '0 24px',
+        }}>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="section-label"
+            style={{ margin: '0 auto 20px' }}
+          >
+            <Sparkles size={14} /> Hyper-Local Targeting Engine
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(2.5rem, 6vw, 4.5rem)',
+              fontWeight: 800,
+              lineHeight: 1.1,
+              marginBottom: '24px',
+            }}
+          >
+            Governance That{' '}
+            <span className="gradient-text">Finds You</span>
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+            style={{
+              fontSize: 'clamp(1rem, 2vw, 1.2rem)',
+              color: 'var(--text-secondary)',
+              maxWidth: '600px',
+              margin: '0 auto 40px',
+              lineHeight: 1.7,
+            }}
+          >
+            AI-powered geo-fencing delivers personalized civic updates
+            when citizens are near government infrastructure. Real-time.
+            Transparent. Location-aware.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.6 }}
+            style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}
+          >
+            <Link href="/dashboard" className="btn-primary">
+              Launch Dashboard <ArrowRight size={18} />
+            </Link>
+            <a href="#features" className="btn-secondary">
+              Explore Features
+            </a>
+          </motion.div>
+        </div>
+
+        {/* Bottom gradient fade */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '100px',
+          background: 'linear-gradient(transparent, var(--bg-primary))',
+          pointerEvents: 'none',
+        }} />
+      </section>
+
+      {/* Glow divider */}
+      <div className="glow-line" />
+
+      {/* ==================== FEATURE CARDS ==================== */}
+      <FeatureCards />
+
+      {/* ==================== STATS ==================== */}
+      <StatsCounter />
+
+      {/* Glow divider */}
+      <div className="glow-line" />
+
+      {/* ==================== HOW IT WORKS ==================== */}
+      <HowItWorks />
+
+      {/* ==================== ARCHITECTURE ==================== */}
+      <ArchitectureSection />
+
+      {/* ==================== CTA SECTION ==================== */}
+      <section style={{
+        padding: '100px 24px',
+        textAlign: 'center',
+        position: 'relative',
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '600px',
+          height: '300px',
+          background: 'radial-gradient(ellipse, rgba(0, 212, 255, 0.06) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          style={{ position: 'relative', zIndex: 2 }}
+        >
+          <h2 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(1.8rem, 4vw, 2.8rem)',
+            fontWeight: 700,
+            marginBottom: '20px',
+          }}>
+            Ready to Transform <span className="gradient-text">Civic Governance</span>?
+          </h2>
+          <p style={{
+            color: 'var(--text-secondary)',
+            fontSize: '1.1rem',
+            maxWidth: '500px',
+            margin: '0 auto 36px',
+          }}>
+            Deploy the engine that brings government transparency to every citizen&apos;s doorstep.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          <Link href="/dashboard" className="btn-primary" style={{ fontSize: '1rem', padding: '14px 36px' }}>
+            Get Started Now <ArrowRight size={20} />
+          </Link>
+        </motion.div>
+      </section>
+
+      {/* ==================== FOOTER ==================== */}
+      <Footer />
+    </>
   );
 }
