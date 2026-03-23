@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "CivicSentinel",
     "slug": "mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,21 +16,46 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#ffffff"
       },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.harshad122006.mobile"
+      "package": "com.harshad122006.mobile",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "a73667cc-422f-4c86-9bc9-a0ea0b270249"
+        "projectId": "bc794369-0580-4d96-b13b-bef42babede2"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "CivicSentinel needs your location to detect which civic zone you are in.",
+          "locationAlwaysPermission": "Allow CivicSentinel to use your location in the background for automatic zone detection.",
+          "locationWhenInUsePermission": "CivicSentinel uses your location to show nearby civic issues."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#6366f1",
+          "androidMode": "default",
+          "androidCollapsedTitle": "CivicSentinel",
+          "iosDisplayInForeground": true
+        }
+      ]
+    ]
   }
 }

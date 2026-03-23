@@ -17,6 +17,7 @@ import type * as neo4j from "../neo4j.js";
 import type * as notifications from "../notifications.js";
 import type * as ogd from "../ogd.js";
 import type * as projects from "../projects.js";
+import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as users from "../users.js";
 
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   ogd: typeof ogd;
   projects: typeof projects;
+  reports: typeof reports;
   seed: typeof seed;
   users: typeof users;
 }>;

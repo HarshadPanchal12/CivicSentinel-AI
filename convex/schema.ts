@@ -157,4 +157,59 @@ export default defineSchema({
     })
         .index("by_timestamp", ["timestamp"])
         .index("by_entityType", ["entityType"]),
+
+    // ====== FIELD REPORTS (Mobile Crowdsourcing) ======
+    reports: defineTable({
+        userId: v.string(), // clerkId or mock ID
+        userName: v.string(),
+        geoFenceId: v.id("geoFences"),
+        content: v.string(),
+        imageUrl: v.optional(v.string()),
+        type: v.union(v.literal("issue"), v.literal("verification"), v.literal("suggestion")),
+        status: v.union(v.literal("open"), v.literal("resolved"), v.literal("investigating")),
+        actionRequests: v.number(), // "Take Action" count
+        likes: v.number(),
+        createdAt: v.number(),
+    })
+        .index("by_geoFenceId", ["geoFenceId"])
+        .index("by_userId", ["userId"]),
+
+    // ====== REPORT INTERACTIONS ======
+    reportInteractions: defineTable({
+        reportId: v.id("reports"),
+        userId: v.string(),
+        type: v.union(v.literal("like"), v.literal("action_request")),
+        createdAt: v.number(),
+    })
+        .index("by_reportId", ["reportId"])
+        .index("by_userId", ["userId"]),
+
+    pushTokens: defineTable({
+        userId: v.string(),
+        pushToken: v.string(),
+        platform: v.string(),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+    }).index("by_userId", ["userId"]),
+
+    zoneEntries: defineTable({
+        userId: v.string(),
+        geoFenceId: v.string(),
+        enteredAt: v.number(),
+        exitedAt: v.optional(v.number()),
+        notified: v.boolean(),
+    })
+        .index("by_userId", ["userId"])
+        .index("by_geoFenceId", ["geoFenceId"]),
+
+    notificationLog: defineTable({
+        userId: v.string(),
+        type: v.string(),
+        title: v.string(),
+        body: v.string(),
+        zoneId: v.optional(v.string()),
+        zoneName: v.optional(v.string()),
+        sentAt: v.number(),
+        status: v.string(),
+    }).index("by_userId", ["userId"]),
 });
