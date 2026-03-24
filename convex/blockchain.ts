@@ -186,6 +186,7 @@ Respond ONLY with JSON:
   "claimedCompletionDate": "[YYYY-MM-DD, 6-18 months after start]",
   "actualStatus": "[realistic status — mix of complete, incomplete, ongoing, delayed]"
 }`;
+            let text = "";
             try {
                 const res = await fetch(
                     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -194,16 +195,23 @@ Respond ONLY with JSON:
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             contents: [{ parts: [{ text: prompt }] }],
-                            generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
+                            generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
                         }),
                     }
                 );
-                const data = await res.json();
-                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-                const clean = text.replace(/```json|```/g, "").trim();
-                officialData = JSON.parse(clean);
+                const data: any = await res.json();
+                text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+                // Robust JSON extraction: Find the first { and last }
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    officialData = JSON.parse(jsonMatch[0]);
+                } else {
+                    throw new Error("No JSON found in response");
+                }
             } catch (e) {
                 console.error("[CivicSentinel] Gemini accountability generation failed:", e);
+                if (text) console.log("Gemini Raw Text:", text);
                 officialData = null;
             }
         }

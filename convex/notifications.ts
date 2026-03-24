@@ -189,6 +189,34 @@ export const send = mutation({
     },
 });
 
+// ── Dashboard Queries ────────────────────────────────────────────────────────
+export const listAll = query({
+    args: {},
+    handler: async (ctx) => {
+        return await ctx.db
+            .query("notifications")
+            .order("desc")
+            .take(50);
+    },
+});
+
+export const getStats = query({
+    args: {},
+    handler: async (ctx) => {
+        const notifications = await ctx.db.query("notifications").collect();
+        const sent = notifications.filter(n => n.status === "sent").length;
+        const delivered = notifications.filter(n => n.status === "delivered").length;
+        const read = notifications.filter(n => n.status === "read").length;
+
+        return {
+            total: notifications.length,
+            sent,
+            delivered,
+            read,
+        };
+    },
+});
+
 // ── Helper: call Gemini to write the notification content ────────────────────
 async function generateAIBriefing(zoneName: string, zoneData: any, accountability: any) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -245,16 +273,23 @@ Title: max 50 chars. Body: max 180 chars. Be specific, not generic.
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.4, maxOutputTokens: 200 },
+                    generationConfig: { temperature: 0.4, maxOutputTokens: 300 },
                 }),
             }
         );
-        const data = await res.json();
+        const data: any = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        const clean = text.replace(/```json|```/g, '').trim();
-        return JSON.parse(clean);
+
+        // Robust JSON extraction
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        } else {
+            throw new Error("No JSON found in Gemini response");
+        }
     } catch (e) {
-        console.error('[CivicSentinel] Gemini failed:', e);
+        console.error('[CivicSentinel] Gemini AI briefing failed:', e);
+        console.log("Gemini Raw Text:", text);
         const fallbackBody = accountability
             ? `🏗️ ${accountability.officialName} (${accountability.partyName}): ${accountability.actualStatus}. Tap to view details.`
             : `${zoneData?.openIssues ?? 0} open issues reported. Tap to view updates.`;
