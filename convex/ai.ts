@@ -41,7 +41,7 @@ export const generateNotification = action({
         const text = result.response.text().trim();
 
         // Call the existing send mutation to log it in the database
-        await ctx.runMutation(api.notifications.send, {
+        await ctx.runMutation((api.notifications as any).send, {
             projectId: args.projectId,
             title: `AI Proximity Alert: ${project.name}`,
             content: text,
