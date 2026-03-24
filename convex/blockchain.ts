@@ -137,7 +137,7 @@ export const verifyRecord = query({
         } else if (args.zoneId) {
             record = await ctx.db
                 .query("accountabilityRecords")
-                .withIndex("by_zoneId", q => q.eq("zoneId", args.zoneId))
+                .withIndex("by_zoneId", q => q.eq("zoneId", args.zoneId!))
                 .first();
         }
 
