@@ -170,6 +170,25 @@ export const logNotification = mutation({
     },
 });
 
+// ── Legacy send mutation for automated alerts (used by ai.ts) ──────────────────
+export const send = mutation({
+    args: {
+        projectId: v.id("projects"),
+        title: v.string(),
+        content: v.string(),
+        type: v.string(),
+        language: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        await ctx.db.insert("notifications", {
+            ...args,
+            type: args.type as any,
+            status: "sent",
+            createdAt: Date.now(),
+        });
+    },
+});
+
 // ── Helper: call Gemini to write the notification content ────────────────────
 async function generateAIBriefing(zoneName: string, zoneData: any, accountability: any) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
