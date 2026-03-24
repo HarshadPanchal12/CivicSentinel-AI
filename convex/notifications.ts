@@ -265,6 +265,7 @@ Respond ONLY with JSON: { "title": "...", "body": "..." }
 Title: max 50 chars. Body: max 180 chars. Be specific, not generic.
 `;
 
+    let text = '';
     try {
         const res = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -278,7 +279,7 @@ Title: max 50 chars. Body: max 180 chars. Be specific, not generic.
             }
         );
         const data: any = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
         // Robust JSON extraction
         const jsonMatch = text.match(/\{[\s\S]*\}/);
