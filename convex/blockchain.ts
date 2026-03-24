@@ -157,7 +157,22 @@ export const verifyRecord = query({
             }
         }
 
-        if (!record) return { verified: false, reason: "Accountability record not found for this ID" };
+        // 3. Last resort: Try name-based lookup
+        if (!record) {
+            try {
+                const shelf = await ctx.db.get(args.zoneId as any);
+                if (shelf && shelf.name) {
+                    record = await ctx.db
+                        .query("accountabilityRecords")
+                        .filter(q => q.eq(q.field("zoneName"), shelf.name))
+                        .first();
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        if (!record) return { verified: false, reason: "Accountability record not found (ID lookups and Name fallbacks failed)" };
 
         const payload = JSON.stringify({
             zoneName: record.zoneName,
