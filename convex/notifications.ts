@@ -80,9 +80,9 @@ export const sendZoneEntryNotification = action({
         zoneName: v.string(),
         zoneData: v.any(), // open issues count, recent work, etc.
     },
-    handler: async (ctx, args) => {
+    handler: async (ctx, args): Promise<any> => {
         // 1. Get user's push token
-        const tokenRecord = await ctx.runQuery(api.notifications.getPushToken, {
+        const tokenRecord: any = await ctx.runQuery(api.notifications.getPushToken, {
             userId: args.userId,
         });
         if (!tokenRecord?.pushToken) {
@@ -90,11 +90,16 @@ export const sendZoneEntryNotification = action({
             return { sent: false, reason: 'no_token' };
         }
 
-        // 2. Call Gemini AI to generate personalised zone briefing
-        const geminiPayload = await generateAIBriefing(args.zoneName, args.zoneData);
+        // Fetch blockchain accountability data for this zone
+        const accountability: any = await ctx.runQuery(api.blockchain.getByZone, {
+            zoneId: args.geoFenceId,
+        });
 
-        // 3. Build Expo push message
-        const message = {
+        // 3. Call Gemini AI to generate personalised zone briefing
+        const geminiPayload: any = await generateAIBriefing(args.zoneName, args.zoneData, accountability);
+
+        // 4. Build Expo push message
+        const message: any = {
             to: tokenRecord.pushToken,
             sound: 'default',
             title: geminiPayload.title,
@@ -105,14 +110,22 @@ export const sendZoneEntryNotification = action({
                 zoneName: args.zoneName,
                 openIssues: args.zoneData?.openIssues ?? 0,
                 workStatus: args.zoneData?.workStatus ?? null,
-                screen: 'ZoneDetail', // tells app which screen to open
+                screen: 'ZoneDetail',
+                // Blockchain accountability data for the app to display
+                officialName: accountability?.officialName ?? null,
+                officialPost: accountability?.officialPost ?? null,
+                partyName: accountability?.partyName ?? null,
+                projectClaim: accountability?.projectClaim ?? null,
+                actualStatus: accountability?.actualStatus ?? null,
+                txHash: accountability?.txHash ?? null,
+                dataHash: accountability?.dataHash ?? null,
             },
             badge: 1,
-            channelId: 'zone-alerts', // Android channel
+            channelId: 'zone-alerts',
         };
 
         // 4. Send via Expo Push API
-        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        const response: any = await fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -122,7 +135,7 @@ export const sendZoneEntryNotification = action({
             body: JSON.stringify(message),
         });
 
-        const result = await response.json();
+        const result: any = await response.json();
 
         // 5. Log to Convex for audit trail
         await ctx.runMutation(api.notifications.logNotification, {
@@ -158,14 +171,28 @@ export const logNotification = mutation({
 });
 
 // ── Helper: call Gemini to write the notification content ────────────────────
-async function generateAIBriefing(zoneName: string, zoneData: any) {
+async function generateAIBriefing(zoneName: string, zoneData: any, accountability: any) {
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+    // Build accountability context string
+    const officialInfo = accountability
+        ? `\nGovernment Accountability (blockchain-verified):
+- Official: ${accountability.officialName} (${accountability.officialPost})
+- Party: ${accountability.partyName}
+- Project claim: ${accountability.projectClaim}
+- Started: ${accountability.startDate} → Claimed done by: ${accountability.claimedCompletionDate}
+- Actual status: ${accountability.actualStatus}
+- Blockchain verified: ${accountability.txHash ? 'Yes ✅' : 'Pending'}`
+        : '\nNo government accountability records found for this zone.';
 
     if (!GEMINI_API_KEY) {
         // Fallback if key not set
+        const fallbackBody = accountability
+            ? `🏗️ ${accountability.officialName} (${accountability.partyName}) claimed: "${accountability.projectClaim}" — Status: ${accountability.actualStatus}. 🔗 Chain verified.`
+            : `${zoneData?.openIssues ?? 0} open issues reported here. Tap to see the latest updates.`;
         return {
             title: `📍 You entered ${zoneName}`,
-            body: `${zoneData?.openIssues ?? 0} open issues reported here. Tap to see the latest updates.`,
+            body: fallbackBody,
         };
     }
 
@@ -179,14 +206,16 @@ Zone data:
 - Work status: ${zoneData?.workStatus ?? 'No active work'}
 - Last inspection: ${zoneData?.lastInspected ?? 'Unknown'}
 - Zone type: ${zoneData?.type ?? 'General'}
+${officialInfo}
 
 Write a SHORT, INFORMATIVE push notification (max 2 sentences) that:
 1. Tells the citizen what's happening in their current zone RIGHT NOW
-2. Mentions any active government work or safety concerns
-3. Encourages civic participation
+2. If accountability data exists, mention the official's name and project status
+3. If the project is incomplete despite claims, highlight the gap
+4. Add "🔗 Verified on blockchain" if txHash exists
 
 Respond ONLY with JSON: { "title": "...", "body": "..." }
-Title: max 50 chars. Body: max 120 chars. Be specific, not generic.
+Title: max 50 chars. Body: max 180 chars. Be specific, not generic.
 `;
 
     try {
@@ -197,7 +226,7 @@ Title: max 50 chars. Body: max 120 chars. Be specific, not generic.
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.4, maxOutputTokens: 150 },
+                    generationConfig: { temperature: 0.4, maxOutputTokens: 200 },
                 }),
             }
         );
@@ -207,9 +236,12 @@ Title: max 50 chars. Body: max 120 chars. Be specific, not generic.
         return JSON.parse(clean);
     } catch (e) {
         console.error('[CivicSentinel] Gemini failed:', e);
+        const fallbackBody = accountability
+            ? `🏗️ ${accountability.officialName} (${accountability.partyName}): ${accountability.actualStatus}. Tap to view details.`
+            : `${zoneData?.openIssues ?? 0} open issues reported. Tap to view updates.`;
         return {
             title: `📍 You entered ${zoneName}`,
-            body: `${zoneData?.openIssues ?? 0} open issues reported. Tap to view updates.`,
+            body: fallbackBody,
         };
     }
 }

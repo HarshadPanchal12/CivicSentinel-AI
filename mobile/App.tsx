@@ -233,8 +233,10 @@ const FeedScreen = () => {
   const requestAction = useMutation('reports:requestAction' as any);
 
   const zoneName = String(
-    activeZone?.name || (locationSt === 'loading' ? 'Getting location...' : 'No zone nearby')
-  );
+  activeZone?.name || 
+  (locationSt === 'loading' ? 'Getting location...' : 
+   locationSt === 'ok' ? 'No active zone nearby' : 'Scanning...')
+);
 
   const FILTERS = ['all', 'issue', 'verification', 'suggestion', 'praise'];
   const filtered = filter === 'all'
@@ -370,7 +372,7 @@ const FeedScreen = () => {
       </Text>
     </View>
   </View>
-) : null}+++++++++++++++++++++++++++++++++++++++++++++++=
+) : null}
 
       {/* Filter tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
@@ -393,8 +395,8 @@ const FeedScreen = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={T.primary} />}
         ListEmptyComponent={() => (
           <View style={styles.emptyState}>
-            {reports === undefined
-              ? <ActivityIndicator color={T.primary} size="large" />
+            {reports === undefined && activeZone !== null
+  ? <ActivityIndicator color={T.primary} size="large" />
               : <>
                 <Activity size={40} color={T.textMute} />
                 <Text style={styles.emptyTitle}>No reports yet</Text>

@@ -10,6 +10,7 @@
 
 import type * as ai from "../ai.js";
 import type * as analytics from "../analytics.js";
+import type * as blockchain from "../blockchain.js";
 import type * as booths from "../booths.js";
 import type * as geoFences from "../geoFences.js";
 import type * as geospatial from "../geospatial.js";
@@ -30,6 +31,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   analytics: typeof analytics;
+  blockchain: typeof blockchain;
   booths: typeof booths;
   geoFences: typeof geoFences;
   geospatial: typeof geospatial;

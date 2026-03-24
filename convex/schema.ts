@@ -212,4 +212,28 @@ export default defineSchema({
         sentAt: v.number(),
         status: v.string(),
     }).index("by_userId", ["userId"]),
+
+    // ====== SYNC STATE (OGD Pagination Tracker) ======
+    syncState: defineTable({
+        key: v.string(),    // e.g. "ogd_offset"
+        value: v.number(),  // current page offset
+    }).index("by_key", ["key"]),
+
+    // ====== BLOCKCHAIN ACCOUNTABILITY RECORDS ======
+    accountabilityRecords: defineTable({
+        zoneId: v.string(),
+        zoneName: v.string(),
+        officialName: v.string(),
+        officialPost: v.string(),
+        partyName: v.string(),
+        projectClaim: v.string(),
+        startDate: v.string(),
+        claimedCompletionDate: v.string(),
+        actualStatus: v.string(),
+        dataHash: v.string(),       // SHA-256 hash of all fields above
+        txHash: v.optional(v.string()),  // Polygon transaction hash
+        createdAt: v.number(),
+    })
+        .index("by_zoneId", ["zoneId"])
+        .index("by_officialName", ["officialName"]),
 });

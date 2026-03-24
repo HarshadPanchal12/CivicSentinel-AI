@@ -26,7 +26,9 @@
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -34,7 +36,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "bc794369-0580-4d96-b13b-bef42babede2"
+        "projectId": "4595b44c-1207-405c-a03f-1d0f47339ab3"
       }
     },
     "plugins": [
@@ -56,6 +58,7 @@
           "iosDisplayInForeground": true
         }
       ]
-    ]
+    ],
+    "owner": "bobiscoming"
   }
 }
