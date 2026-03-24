@@ -12,6 +12,7 @@ export const create = mutation({
         ),
         center: v.object({ lat: v.number(), lng: v.number() }),
         radius: v.number(),
+        linkedProjectId: v.optional(v.id("projects")),
         polygon: v.optional(v.array(v.object({ lat: v.number(), lng: v.number() }))),
     },
     handler: async (ctx, args) => {

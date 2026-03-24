@@ -135,10 +135,26 @@ export const verifyRecord = query({
         if (args.recordId) {
             record = await ctx.db.get(args.recordId);
         } else if (args.zoneId) {
+            // 1. Try direct lookup (best for OGD zones where zoneId = projectId)
             record = await ctx.db
                 .query("accountabilityRecords")
                 .withIndex("by_zoneId", q => q.eq("zoneId", args.zoneId!))
                 .first();
+
+            // 2. If not found, check if this is a geoFenceId with a linked project
+            if (!record) {
+                try {
+                    const shelf = await ctx.db.get(args.zoneId as any);
+                    if (shelf && shelf.linkedProjectId) {
+                        record = await ctx.db
+                            .query("accountabilityRecords")
+                            .withIndex("by_zoneId", q => q.eq("zoneId", String(shelf.linkedProjectId)))
+                            .first();
+                    }
+                } catch (e) {
+                    // Not a valid ID format or other error, just continue
+                }
+            }
         }
 
         if (!record) return { verified: false, reason: "Accountability record not found for this ID" };
@@ -338,5 +354,30 @@ export const seedDemoRecords = mutation({
         }
 
         return "Seeded 3 demo accountability records with blockchain hashes!";
+    },
+});
+
+// ── Utility: Fix legacy links (run this if verifyRecord fails on old data) ─────
+export const fixLegacyLinks = mutation({
+    args: {},
+    handler: async (ctx) => {
+        const fences = await ctx.db.query("geoFences").collect();
+        let fixedCount = 0;
+
+        for (const fence of fences) {
+            if (!fence.linkedProjectId) {
+                // Try to find a project with a similar name
+                // OGD: Facility Name vs Facility Name Zone
+                const baseName = fence.name.replace(" Zone", "");
+                const projects = await ctx.db.query("projects").collect();
+                const project = projects.find(p => p.name.includes(baseName));
+
+                if (project) {
+                    await ctx.db.patch(fence._id, { linkedProjectId: project._id });
+                    fixedCount++;
+                }
+            }
+        }
+        return `Successfully linked ${fixedCount} legacy geo-fences to their projects.`;
     },
 });

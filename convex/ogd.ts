@@ -117,6 +117,7 @@ export const syncProjects = action({
                     type: "hospital",
                     center: { lat, lng },
                     radius: 1500,
+                    linkedProjectId: projectId,
                 });
 
                 // 4. Auto-generate blockchain accountability record via Gemini
