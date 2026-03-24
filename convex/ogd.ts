@@ -52,7 +52,7 @@ export const checkDuplicate = query({
 // ── Main OGD Sync Action (with pagination + dedup) ───────────────────────────
 export const syncProjects = action({
     args: {},
-    handler: async (ctx) => {
+    handler: async (ctx): Promise<any> => {
         const apiKey = process.env.OGD_API_KEY;
         if (!apiKey) {
             throw new Error("Missing OGD_API_KEY in environment variables");
@@ -60,7 +60,7 @@ export const syncProjects = action({
 
         try {
             // 1. Get current offset from Convex
-            const currentOffset = await ctx.runQuery(api.ogd.getOffset, {});
+            const currentOffset: any = await ctx.runQuery(api.ogd.getOffset, {});
             const batchSize = 10;
 
             // 2. Fetch the NEXT page from OGD
@@ -72,7 +72,7 @@ export const syncProjects = action({
                 throw new Error(`OGD API Error: ${response.status}`);
             }
 
-            const data = await response.json();
+            const data: any = await response.json();
 
             if (!data || !data.records || data.records.length === 0) {
                 return "No more records available from OGD API. You've fetched all available data!";
@@ -91,7 +91,7 @@ export const syncProjects = action({
                 const zoneName = `${facilityName} Zone`;
 
                 // 3. Check for duplicate before inserting
-                const isDuplicate = await ctx.runQuery(api.ogd.checkDuplicate, { name: zoneName });
+                const isDuplicate: any = await ctx.runQuery(api.ogd.checkDuplicate, { name: zoneName });
                 if (isDuplicate) {
                     skippedCount++;
                     console.log(`Skipped duplicate: ${zoneName}`);
@@ -101,7 +101,7 @@ export const syncProjects = action({
                 const lat = record.latitude ? parseFloat(record.latitude) : addJitter(19.0760);
                 const lng = record.longitude ? parseFloat(record.longitude) : addJitter(72.8777);
 
-                const projectId = await ctx.runMutation(api.projects.create, {
+                const projectId: any = await ctx.runMutation(api.projects.create, {
                     name: `OGD: ${facilityName}`,
                     description: `Government facility located in ${district}, ${state}. Data sourced from data.gov.in`,
                     type: "hospital",
