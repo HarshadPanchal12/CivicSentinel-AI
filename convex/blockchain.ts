@@ -126,10 +126,22 @@ export const updateTxHash = mutation({
 });
 
 export const verifyRecord = query({
-    args: { recordId: v.id("accountabilityRecords") },
+    args: {
+        recordId: v.optional(v.id("accountabilityRecords")),
+        zoneId: v.optional(v.string())
+    },
     handler: async (ctx, args) => {
-        const record = await ctx.db.get(args.recordId);
-        if (!record) return { verified: false, reason: "Record not found" };
+        let record;
+        if (args.recordId) {
+            record = await ctx.db.get(args.recordId);
+        } else if (args.zoneId) {
+            record = await ctx.db
+                .query("accountabilityRecords")
+                .withIndex("by_zoneId", q => q.eq("zoneId", args.zoneId))
+                .first();
+        }
+
+        if (!record) return { verified: false, reason: "Accountability record not found for this ID" };
 
         const payload = JSON.stringify({
             zoneName: record.zoneName,

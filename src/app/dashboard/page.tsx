@@ -39,8 +39,8 @@ export default function DashboardOverview() {
     const handleSyncOgd = async () => {
         setIsSyncingOgd(true);
         try {
-            await syncOgd();
-            alert("Successfully fetched live infrastructure projects from Open Government Data (api.data.gov.in)!");
+            const message = await syncOgd();
+            alert(message);
         } catch (error) {
             console.error(error);
             alert("Failed to fetch OGD data. See console logs.");
