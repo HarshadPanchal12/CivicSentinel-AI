@@ -251,6 +251,28 @@ export const listLogs = query({
     },
 });
 
+export const markRead = mutation({
+    args: { id: v.id("notificationLog") },
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.id, { status: "read" });
+    },
+});
+
+export const markAllRead = mutation({
+    args: { userId: v.string() },
+    handler: async (ctx, args) => {
+        const unread = await ctx.db
+            .query("notificationLog")
+            .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+            .filter((q) => q.neq(q.field("status"), "read"))
+            .collect();
+
+        for (const n of unread) {
+            await ctx.db.patch(n._id, { status: "read" });
+        }
+    },
+});
+
 // ── Legacy send mutation for automated alerts (used by ai.ts) ──────────────────
 export const send = mutation({
     args: {

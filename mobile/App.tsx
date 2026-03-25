@@ -873,23 +873,39 @@ const ZoneDetailScreen = ({ zone }: any) => {
 const NotificationsScreen = () => {
   const nav = useContext(NavContext);
   const logResults = useQuery('notifications:listLogs' as any, { userId: MOCK_CITIZEN_ID });
-  const [readIds, setReadIds] = useState<string[]>([]);
+  const markRead = useMutation('notifications:markRead' as any);
+  const markAllRead = useMutation('notifications:markAllRead' as any);
 
-  // We consider a notification read if its ID is in our local 'readIds' 
-  // (In a real app, this would be a mutation to the DB)
   const notifications = (logResults || []).map((n: any) => ({
     ...n,
-    read: readIds.includes(n._id) || n.status === 'read',
+    read: n.status === 'read',
     time: new Date(n.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   }));
 
   const unreadCount = notifications.filter(n => !n.read).length;
   const iconMap: any = { zone_entry: '📍', alert: '🚨', ai: '🤖', action: '⚡', work: '🏗', reply: '💬' };
 
-  const markAllRead = () => setReadIds(notifications.map(n => n._id));
+  const onMarkAll = async () => {
+    try {
+      await markAllRead({ userId: MOCK_CITIZEN_ID });
+    } catch (e) {
+      console.error('[CivicSentinel] Mark all read failed:', e);
+    }
+  };
+
+  const onMarkOne = async (id: string) => {
+    try {
+      await markRead({ id });
+    } catch (e) {
+      console.error('[CivicSentinel] Mark read failed:', e);
+    }
+  };
 
   const renderNotif = ({ item: n }: any) => (
-    <View style={[styles.notifCard, !n.read && styles.notifCardUnread]}>
+    <TouchableOpacity
+      style={[styles.notifCard, !n.read && styles.notifCardUnread]}
+      onPress={() => !n.read && onMarkOne(n._id)}
+    >
       <View style={styles.notifIcon}>
         <Text style={{ fontSize: 20 }}>{iconMap[n.type] || '🔔'}</Text>
       </View>
@@ -930,11 +946,9 @@ const NotificationsScreen = () => {
         <Text style={styles.notifTime}>{n.time} · {new Date(n.sentAt).toLocaleDateString()}</Text>
       </View>
       {!n.read && (
-        <TouchableOpacity onPress={() => setReadIds([...readIds, n._id])}>
-          <View style={styles.unreadDot} />
-        </TouchableOpacity>
+        <View style={styles.unreadDot} />
       )}
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -945,15 +959,15 @@ const NotificationsScreen = () => {
           <Text style={styles.screenHeaderTitle}>Alerts & Insights</Text>
         </View>
         {unreadCount > 0 && (
-          <TouchableOpacity style={styles.markReadBtn} onPress={markAllRead}>
-            <Text style={styles.markReadText}>Clear All</Text>
+          <TouchableOpacity style={styles.markReadBtn} onPress={onMarkAll}>
+            <Text style={styles.markReadText}>Mark All Read</Text>
           </TouchableOpacity>
         )}
       </View>
 
       <FlatList
         data={notifications}
-        keyExtractor={n => n._id}
+        keyExtractor={n => n._creationTime.toString()}
         contentContainerStyle={{ padding: S.md, paddingBottom: 100 }}
         ListEmptyComponent={() => (
           <View style={styles.emptyState}>
