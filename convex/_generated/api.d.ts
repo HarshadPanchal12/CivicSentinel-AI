@@ -20,6 +20,7 @@ import type * as ogd from "../ogd.js";
 import type * as projects from "../projects.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
+import type * as testZone from "../testZone.js";
 import type * as users from "../users.js";
 
 import type {
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   reports: typeof reports;
   seed: typeof seed;
+  testZone: typeof testZone;
   users: typeof users;
 }>;
 

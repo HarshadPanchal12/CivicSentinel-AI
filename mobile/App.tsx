@@ -36,7 +36,10 @@ import {
   RefreshControl,
   Image,
 } from 'react-native';
+import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
 import { ConvexProvider, ConvexReactClient, useQuery, useMutation } from 'convex/react';
+import { ConvexHttpClient } from 'convex/browser';
 import { usePushToken } from './hooks/usePushToken';
 import {
   MapPin, Bell, ThumbsUp, MessageSquare, Plus, Navigation,
@@ -57,6 +60,31 @@ const MOCK_CITIZEN_ID = "user_citizen_123";
 const MOCK_CITIZEN_NAME = "Harshad P.";
 
 const { width: SW, height: SH } = Dimensions.get('window');
+
+const GEOFENCE_TASK = 'GEOFENCE_ZONE_ENTRY';
+const convexHttpClient = new ConvexHttpClient(CONVEX_URL);
+
+// ─────────────────────────────────────────────
+// BACKGROUND TASK DEFINITION
+// ─────────────────────────────────────────────
+TaskManager.defineTask(GEOFENCE_TASK, async ({ data: { eventType, region }, error }: any) => {
+  if (error) {
+    console.error('[CivicSentinel] Geofencing task error:', error);
+    return;
+  }
+  if (eventType === Location.GeofencingEventType.Enter) {
+    console.log('[CivicSentinel] Entered zone in background:', region.identifier);
+    try {
+      // Call Convex to log entry and trigger push notification
+      await convexHttpClient.mutation('notifications:logZoneEntry' as any, {
+        userId: MOCK_CITIZEN_ID,
+        geoFenceId: region.identifier,
+      });
+    } catch (e) {
+      console.error('[CivicSentinel] Failed to log background entry:', e);
+    }
+  }
+});
 
 // ─────────────────────────────────────────────
 // THEME — Responsive & Premium
@@ -160,11 +188,11 @@ const SectionHeader = ({ title, action, onAction }: any) => (
 // ─────────────────────────────────────────────
 // GPS ZONE DETECTION
 // ─────────────────────────────────────────────
-const haversine = (lat1:number,lng1:number,lat2:number,lng2:number) => {
-  const R=6371000,φ1=lat1*Math.PI/180,φ2=lat2*Math.PI/180;
-  const Δφ=(lat2-lat1)*Math.PI/180,Δλ=(lng2-lng1)*Math.PI/180;
-  const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+  const R = 6371000, φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180, Δλ = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
 const pickZone = (lat: number, lng: number, zones: any[]): any => {
@@ -174,7 +202,7 @@ const pickZone = (lat: number, lng: number, zones: any[]): any => {
   const match = zones.find((z: any) => {
     const zLat = Number(z.center?.lat ?? z.latitude ?? z.lat ?? 0);
     const zLng = Number(z.center?.lng ?? z.longitude ?? z.lng ?? 0);
-    const r    = Number(z.radius ?? 500);
+    const r = Number(z.radius ?? 500);
     if (!zLat || !zLng) return false;
     return haversine(lat, lng, zLat, zLng) <= r;
   });
@@ -183,36 +211,79 @@ const pickZone = (lat: number, lng: number, zones: any[]): any => {
   return match ?? null;
 };
 
-const useGPS = (zones:any[]|undefined) => {
-  const [pos,  setPos]  = useState<{lat:number,lng:number}|null>(null);
+const useGPS = (zones: any[] | undefined) => {
+  const [pos, setPos] = useState<{ lat: number, lng: number } | null>(null);
   const [zone, setZone] = useState<any>(null);
-  const [st,   setSt]   = useState<'loading'|'ok'|'denied'|'fallback'>('loading');
-  useEffect(()=>{
+  const [st, setSt] = useState<'loading' | 'ok' | 'denied' | 'fallback'>('loading');
+
+  useEffect(() => {
     if (!zones?.length) return;
-    let sub:any=null;
-    (async()=>{
-      const loc = await import('expo-location');
-      const {status} = await loc.requestForegroundPermissionsAsync();
-      if (status!=='granted'){ setSt('denied'); setZone(zones[0]); return; }
+    let sub: any = null;
+
+    (async () => {
+      // 1. Request Foreground Permissions
+      const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') {
+        setSt('denied');
+        setZone(zones[0]);
+        return;
+      }
+
+      // 2. Request Background Permissions (REQUIRED for app closed)
+      const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (bgStatus === 'granted') {
+        console.log('[CivicSentinel] Background location granted. Registering geofences...');
+
+        // Register native geofences for EACH active zone
+        const regions = zones.map(z => ({
+          identifier: String(z._id),
+          latitude: Number(z.center?.lat ?? z.lat ?? 0),
+          longitude: Number(z.center?.lng ?? z.lng ?? 0),
+          radius: Number(z.radius ?? 400),
+          notifyOnEnter: true,
+          notifyOnExit: false,
+        })).filter(r => r.latitude !== 0);
+
+        if (regions.length > 0) {
+          try {
+            await Location.startGeofencingAsync(GEOFENCE_TASK, regions);
+            console.log(`[CivicSentinel] Registered ${regions.length} background geofences.`);
+          } catch (e) {
+            console.error('[CivicSentinel] Failed to start geofencing:', e);
+          }
+        }
+      } else {
+        console.warn('[CivicSentinel] Background location denied. Notifications only work in foreground.');
+      }
+
+      // 3. Start Foreground Watching
       try {
-        const p = await loc.getCurrentPositionAsync({accuracy:loc.Accuracy.Balanced});
-        const {latitude:lt,longitude:ln}=p.coords;
-        setPos({lat:lt,lng:ln});
-        setZone(pickZone(lt,ln,zones));
+        const p = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const { latitude: lt, longitude: ln } = p.coords;
+        setPos({ lat: lt, lng: ln });
+        setZone(pickZone(lt, ln, zones));
         setSt('ok');
-      } catch { setSt('fallback'); setZone(zones[0]); }
-      sub = await loc.watchPositionAsync(
-        {accuracy:loc.Accuracy.Balanced,distanceInterval:50,timeInterval:30000},
-        p=>{
-          const {latitude:lt,longitude:ln}=p.coords;
-          setPos({lat:lt,lng:ln});
-          setZone(pickZone(lt,ln,zones));
+      } catch {
+        setSt('fallback');
+        setZone(zones[0]);
+      }
+
+      sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, distanceInterval: 50, timeInterval: 30000 },
+        p => {
+          const { latitude: lt, longitude: ln } = p.coords;
+          setPos({ lat: lt, lng: ln });
+          setZone(pickZone(lt, ln, zones));
         }
       );
     })();
-    return ()=>{ sub?.remove?.(); };
-  },[zones?.length]);
-  return {pos,zone,st};
+
+    return () => {
+      sub?.remove?.();
+    };
+  }, [zones?.length]);
+
+  return { pos, zone, st };
 };
 
 // ─────────────────────────────────────────────
@@ -229,14 +300,30 @@ const FeedScreen = () => {
     'reports:listByGeoFence' as any,
     activeZone?._id ? { geoFenceId: activeZone._id } : 'skip'
   );
-  const toggleLike    = useMutation('reports:toggleLike' as any);
+  const toggleLike = useMutation('reports:toggleLike' as any);
   const requestAction = useMutation('reports:requestAction' as any);
+  const logZoneEntry = useMutation('notifications:logZoneEntry' as any);
+
+  // ── Auto-trigger notification on zone entry ──
+  const lastLoggedZone = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeZone?._id && activeZone._id !== lastLoggedZone.current) {
+      console.log(`[CivicSentinel] Entering zone: ${activeZone.name}`);
+      lastLoggedZone.current = activeZone._id;
+      logZoneEntry({
+        userId: MOCK_CITIZEN_ID,
+        geoFenceId: activeZone._id
+      }).catch(e => console.error("[CivicSentinel] Entry log failed:", e));
+    } else if (!activeZone) {
+      lastLoggedZone.current = null;
+    }
+  }, [activeZone?._id]);
 
   const zoneName = String(
-  activeZone?.name || 
-  (locationSt === 'loading' ? 'Getting location...' : 
-   locationSt === 'ok' ? 'No active zone nearby' : 'Scanning...')
-);
+    activeZone?.name ||
+    (locationSt === 'loading' ? 'Getting location...' :
+      locationSt === 'ok' ? 'No active zone nearby' : 'Scanning...')
+  );
 
   const FILTERS = ['all', 'issue', 'verification', 'suggestion', 'praise'];
   const filtered = filter === 'all'
@@ -341,38 +428,38 @@ const FeedScreen = () => {
 
       {/* Zone Banner */}
       {activeZone ? (
-  <View style={styles.zoneBanner}>
-    <View style={styles.zoneBannerIcon}>
-      <Navigation size={16} color={T.primary} />
-    </View>
-    <View style={{ flex: 1 }}>
-      <Text style={styles.zoneBannerTitle}>You are in {zoneName}</Text>
-      <Text style={styles.zoneBannerSub}>
-        {locationSt === 'ok'
-          ? `GPS Verified · ${pos?.lat.toFixed(4)}, ${pos?.lng.toFixed(4)}`
-          : 'Active Monitoring • Geo-Verified'}
-      </Text>
-    </View>
-    <View style={styles.livePill}>
-      <View style={styles.liveDot} />
-      <Text style={styles.liveText}>LIVE</Text>
-    </View>
-  </View>
-) : locationSt === 'ok' ? (
-  <View style={[styles.zoneBanner, { backgroundColor: T.surfaceAlt }]}>
-    <View style={styles.zoneBannerIcon}>
-      <MapPin size={16} color={T.textMute} />
-    </View>
-    <View style={{ flex: 1 }}>
-      <Text style={[styles.zoneBannerTitle, { color: T.textSub }]}>
-        Not in any active zone
-      </Text>
-      <Text style={styles.zoneBannerSub}>
-        {pos?.lat.toFixed(4)}, {pos?.lng.toFixed(4)} · Move near a monitored area
-      </Text>
-    </View>
-  </View>
-) : null}
+        <View style={styles.zoneBanner}>
+          <View style={styles.zoneBannerIcon}>
+            <Navigation size={16} color={T.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.zoneBannerTitle}>You are in {zoneName}</Text>
+            <Text style={styles.zoneBannerSub}>
+              {locationSt === 'ok'
+                ? `GPS Verified · ${pos?.lat.toFixed(4)}, ${pos?.lng.toFixed(4)}`
+                : 'Active Monitoring • Geo-Verified'}
+            </Text>
+          </View>
+          <View style={styles.livePill}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>LIVE</Text>
+          </View>
+        </View>
+      ) : locationSt === 'ok' ? (
+        <View style={[styles.zoneBanner, { backgroundColor: T.surfaceAlt }]}>
+          <View style={styles.zoneBannerIcon}>
+            <MapPin size={16} color={T.textMute} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.zoneBannerTitle, { color: T.textSub }]}>
+              Not in any active zone
+            </Text>
+            <Text style={styles.zoneBannerSub}>
+              {pos?.lat.toFixed(4)}, {pos?.lng.toFixed(4)} · Move near a monitored area
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       {/* Filter tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
@@ -396,7 +483,7 @@ const FeedScreen = () => {
         ListEmptyComponent={() => (
           <View style={styles.emptyState}>
             {reports === undefined && activeZone !== null
-  ? <ActivityIndicator color={T.primary} size="large" />
+              ? <ActivityIndicator color={T.primary} size="large" />
               : <>
                 <Activity size={40} color={T.textMute} />
                 <Text style={styles.emptyTitle}>No reports yet</Text>
@@ -785,61 +872,97 @@ const ZoneDetailScreen = ({ zone }: any) => {
 // ─────────────────────────────────────────────
 const NotificationsScreen = () => {
   const nav = useContext(NavContext);
-  const [notifs, setNotifs] = useState([
-    { id: '1', type: 'alert', title: 'You entered Tembhipada Zone', body: '3 open issues reported. Tap to view details.', time: 'Just now', read: false, zone: 'Tembhipada' },
-    { id: '2', type: 'ai', title: '🤖 AI Zone Briefing Ready', body: 'Gemini has analysed Tembhipada zone. Road repair 80% complete. 2 new issues flagged.', time: '5 min ago', read: false, zone: 'Tembhipada' },
-    { id: '3', type: 'action', title: '⚡ Action Threshold Reached!', body: '20 citizens demanded action on Bridge Crack. Ministry Dashboard notified automatically.', time: '1 hr ago', read: false, zone: 'Mulund Bridge' },
-    { id: '4', type: 'work', title: '🏗 Govt Work Update', body: 'Road repair work at Mulund Bridge confirmed started. PWD team on site. Expected completion: 3 days.', time: '2 hr ago', read: true, zone: 'Mulund Bridge' },
-    { id: '5', type: 'reply', title: '💬 Rahul replied to your report', body: '"PWD team confirmed they got the complaint. Work should start tomorrow."', time: '3 hr ago', read: true, zone: null },
-    { id: '6', type: 'badge', title: '🏆 Civic Hero Badge Earned!', body: 'Your report on Mulund Bridge led to official action. You earned the Civic Hero badge!', time: 'Yesterday', read: true, zone: null },
-    { id: '7', type: 'work', title: '✅ Work Completed', body: 'Streetlight repair at Andheri Station Zone marked complete by MSEDCL. Before/after photos uploaded.', time: 'Yesterday', read: true, zone: 'Andheri Station' },
-  ]);
+  const logResults = useQuery('notifications:listLogs' as any, { userId: MOCK_CITIZEN_ID });
+  const [readIds, setReadIds] = useState<string[]>([]);
 
-  const unread = notifs.filter(n => !n.read).length;
-  const iconMap: any = { alert: '🚨', ai: '🤖', action: '⚡', work: '🏗', reply: '💬', badge: '🏆' };
+  // We consider a notification read if its ID is in our local 'readIds' 
+  // (In a real app, this would be a mutation to the DB)
+  const notifications = (logResults || []).map((n: any) => ({
+    ...n,
+    read: readIds.includes(n._id) || n.status === 'read',
+    time: new Date(n.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  }));
 
-  const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const iconMap: any = { zone_entry: '📍', alert: '🚨', ai: '🤖', action: '⚡', work: '🏗', reply: '💬' };
+
+  const markAllRead = () => setReadIds(notifications.map(n => n._id));
+
+  const renderNotif = ({ item: n }: any) => (
+    <View style={[styles.notifCard, !n.read && styles.notifCardUnread]}>
+      <View style={styles.notifIcon}>
+        <Text style={{ fontSize: 20 }}>{iconMap[n.type] || '🔔'}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.notifTitle}>{n.title}</Text>
+        <Text style={styles.notifBody}>{n.body}</Text>
+
+        {/* Accountability Details (The "Helpful" Part) */}
+        {(n.officialName || n.projectClaim) && (
+          <View style={styles.notifDetailBox}>
+            <View style={styles.notifDetailHeader}>
+              <ShieldCheck size={14} color={T.accent} />
+              <Text style={styles.notifDetailHeaderText}>PROMISE TRACKER</Text>
+            </View>
+            <Text style={styles.notifDetailSub}>Official: <Text style={{ fontWeight: '700', color: T.text }}>{n.officialName}</Text></Text>
+            <Text style={styles.notifDetailSub}>Project: <Text style={{ fontWeight: '600' }}>{n.projectClaim}</Text></Text>
+            {n.advantages && (
+              <View style={styles.advantagePill}>
+                <Zap size={10} color={T.warning} />
+                <Text style={styles.advantageText}>{n.advantages}</Text>
+              </View>
+            )}
+            {n.txHash && (
+              <View style={styles.chainBadge}>
+                <CheckCircle size={10} color={T.accent} />
+                <Text style={styles.chainText}>VERIFIED ON POLYGON</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {n.zoneName && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 8 }}>
+            <MapPin size={10} color={T.primary} />
+            <Text style={{ fontSize: 10, color: T.primary, fontWeight: '600' }}>{n.zoneName}</Text>
+          </View>
+        )}
+        <Text style={styles.notifTime}>{n.time} · {new Date(n.sentAt).toLocaleDateString()}</Text>
+      </View>
+      {!n.read && (
+        <TouchableOpacity onPress={() => setReadIds([...readIds, n._id])}>
+          <View style={styles.unreadDot} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.screen}>
       <View style={[styles.screenHeader, { paddingTop: STATUSBAR_H + 10 }]}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.screenHeaderSub}>{unread > 0 ? `${unread} unread` : 'All caught up'}</Text>
-          <Text style={styles.screenHeaderTitle}>Notifications</Text>
+          <Text style={styles.screenHeaderSub}>{unreadCount > 0 ? `${unreadCount} new alerts` : 'No new alerts'}</Text>
+          <Text style={styles.screenHeaderTitle}>Alerts & Insights</Text>
         </View>
-        {unread > 0 && (
+        {unreadCount > 0 && (
           <TouchableOpacity style={styles.markReadBtn} onPress={markAllRead}>
-            <Text style={styles.markReadText}>Mark all read</Text>
+            <Text style={styles.markReadText}>Clear All</Text>
           </TouchableOpacity>
         )}
       </View>
 
       <FlatList
-        data={notifs}
-        keyExtractor={n => n.id}
+        data={notifications}
+        keyExtractor={n => n._id}
         contentContainerStyle={{ padding: S.md, paddingBottom: 100 }}
-        renderItem={({ item: n }) => (
-          <TouchableOpacity
-            style={[styles.notifCard, !n.read && styles.notifCardUnread]}
-            onPress={() => setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
-          >
-            <View style={styles.notifIcon}>
-              <Text style={{ fontSize: 20 }}>{iconMap[n.type] || '🔔'}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.notifTitle}>{n.title}</Text>
-              <Text style={styles.notifBody}>{n.body}</Text>
-              {n.zone && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 }}>
-                  <MapPin size={10} color={T.primary} />
-                  <Text style={{ fontSize: 10, color: T.primary, fontWeight: '600' }}>{n.zone}</Text>
-                </View>
-              )}
-              <Text style={styles.notifTime}>{n.time}</Text>
-            </View>
-            {!n.read && <View style={styles.unreadDot} />}
-          </TouchableOpacity>
+        ListEmptyComponent={() => (
+          <View style={styles.emptyState}>
+            <Bell size={40} color={T.textMute} />
+            <Text style={styles.emptyTitle}>Your feed is quiet</Text>
+            <Text style={styles.emptySub}>Notifications about your zones will appear here.</Text>
+          </View>
         )}
+        renderItem={renderNotif}
       />
     </View>
   );
@@ -1262,6 +1385,25 @@ const styles = StyleSheet.create({
   notifBody: { fontSize: 12, color: T.textSub, lineHeight: 17 },
   notifTime: { fontSize: 10, color: T.textMute, marginTop: 4 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: T.primary, marginTop: 4, flexShrink: 0 },
+
+  // Notif Details (New)
+  notifDetailBox: {
+    backgroundColor: T.surfaceAlt, borderRadius: 10, padding: 10, marginTop: 10,
+    borderLeftWidth: 3, borderLeftColor: T.accent,
+  },
+  notifDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+  notifDetailHeaderText: { fontSize: 10, fontWeight: '800', color: T.accent, letterSpacing: 0.5 },
+  notifDetailSub: { fontSize: 11, color: T.textSub, marginBottom: 2 },
+  advantagePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 6, marginTop: 6, alignSelf: 'flex-start',
+  },
+  advantageText: { fontSize: 10, color: '#92400E', fontWeight: '700' },
+  chainBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8,
+  },
+  chainText: { fontSize: 9, fontWeight: '800', color: T.accent },
 
   // Profile
   profileCard: {

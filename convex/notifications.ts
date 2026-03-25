@@ -137,7 +137,7 @@ export const sendZoneEntryNotification = action({
 
         const result: any = await response.json();
 
-        // 5. Log to Convex for audit trail
+        // 5. Log to Convex for audit trail with rich metadata
         await ctx.runMutation(api.notifications.logNotification, {
             userId: args.userId,
             type: 'zone_entry',
@@ -145,11 +145,77 @@ export const sendZoneEntryNotification = action({
             body: geminiPayload.body,
             zoneId: args.geoFenceId,
             zoneName: args.zoneName,
+            officialName: accountability?.officialName,
+            projectClaim: accountability?.projectClaim,
+            advantages: accountability?.actualStatus, // We use actualStatus as a proxy for 'advantages' or we could add a specific field
+            txHash: accountability?.txHash,
             sentAt: Date.now(),
             status: result?.data?.status ?? 'unknown',
         });
 
         return { sent: true, result };
+    },
+});
+
+// ── Log zone entry and trigger push (called by mobile app) ────────────────────
+export const logZoneEntry = mutation({
+    args: {
+        userId: v.string(),
+        geoFenceId: v.id('geoFences'),
+    },
+    handler: async (ctx, args) => {
+        const now = Date.now();
+        const thirtyMinsAgo = now - (30 * 60 * 1000);
+
+        // 1. Debounce: Check if we notified this user for this zone recently
+        const recentEntry = await ctx.db
+            .query('zoneEntries')
+            .withIndex('by_userId', q => q.eq('userId', args.userId))
+            .filter(q =>
+                q.and(
+                    q.eq(q.field('geoFenceId'), args.geoFenceId),
+                    q.gt(q.field('enteredAt'), thirtyMinsAgo)
+                )
+            )
+            .first();
+
+        if (recentEntry && recentEntry.notified) {
+            console.log(`[CivicSentinel] Skipping notification for ${args.userId} in ${args.geoFenceId} (already notified recently)`);
+            return { status: 'skipped_debounced' };
+        }
+
+        // 2. Fetch zone details for the AI prompt
+        const zone = await ctx.db.get(args.geoFenceId);
+        if (!zone) return { status: 'error_zone_not_found' };
+
+        // 3. Log the entry
+        await ctx.db.insert('zoneEntries', {
+            userId: args.userId,
+            geoFenceId: args.geoFenceId,
+            enteredAt: now,
+            notified: true,
+        });
+
+        // 4. Schedule the AI Push Notification Action (runs in background)
+        // We pass mocked/real zone data based on reports
+        const reports = await ctx.db
+            .query('reports')
+            .withIndex('by_geoFenceId', q => q.eq('geoFenceId', args.geoFenceId))
+            .collect();
+
+        await ctx.scheduler.runAfter(0, api.notifications.sendZoneEntryNotification, {
+            userId: args.userId,
+            geoFenceId: args.geoFenceId,
+            zoneName: zone.name,
+            zoneData: {
+                openIssues: reports.filter(r => r.status === 'open').length,
+                recentWork: "General maintenance",
+                workStatus: "Active",
+                type: zone.type,
+            }
+        });
+
+        return { status: 'pushed_to_ai' };
     },
 });
 
@@ -162,11 +228,26 @@ export const logNotification = mutation({
         body: v.string(),
         zoneId: v.optional(v.string()),
         zoneName: v.optional(v.string()),
+        officialName: v.optional(v.string()),
+        projectClaim: v.optional(v.string()),
+        advantages: v.optional(v.string()),
+        txHash: v.optional(v.string()),
         sentAt: v.number(),
         status: v.string(),
     },
     handler: async (ctx, args) => {
         await ctx.db.insert('notificationLog', args);
+    },
+});
+
+export const listLogs = query({
+    args: { userId: v.string() },
+    handler: async (ctx, args) => {
+        return await ctx.db
+            .query("notificationLog")
+            .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+            .order("desc")
+            .take(25);
     },
 });
 

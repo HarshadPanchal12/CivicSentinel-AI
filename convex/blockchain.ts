@@ -1,6 +1,7 @@
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
+import { Doc } from "./_generated/dataModel";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BLOCKCHAIN ACCOUNTABILITY LAYER
@@ -144,7 +145,7 @@ export const verifyRecord = query({
             // 2. If not found, check if this is a geoFenceId with a linked project
             if (!record) {
                 try {
-                    const shelf = await ctx.db.get(args.zoneId as any);
+                    const shelf = (await ctx.db.get(args.zoneId as any)) as Doc<"geoFences"> | null;
                     if (shelf && shelf.linkedProjectId) {
                         record = await ctx.db
                             .query("accountabilityRecords")
@@ -160,7 +161,7 @@ export const verifyRecord = query({
         // 3. Last resort: Try name-based lookup
         if (!record) {
             try {
-                const shelf = await ctx.db.get(args.zoneId as any);
+                const shelf = (await ctx.db.get(args.zoneId as any)) as Doc<"geoFences"> | null;
                 if (shelf && shelf.name) {
                     record = await ctx.db
                         .query("accountabilityRecords")
