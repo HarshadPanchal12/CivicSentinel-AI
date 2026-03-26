@@ -38,6 +38,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConvexProvider, ConvexReactClient, useQuery, useMutation } from 'convex/react';
 import { ConvexHttpClient } from 'convex/browser';
 import { usePushToken } from './hooks/usePushToken';
@@ -875,14 +876,23 @@ const NotificationsScreen = () => {
   const logResults = useQuery('notifications:listLogs' as any, { userId: MOCK_CITIZEN_ID });
   const markRead = useMutation('notifications:markRead' as any);
   const markAllRead = useMutation('notifications:markAllRead' as any);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
+
+  // Load saved notifications from AsyncStorage on mount
+  useEffect(() => {
+    AsyncStorage.getItem('saved_notifs').then(data => {
+      if (data) setSavedIds(JSON.parse(data));
+    });
+  }, []);
 
   const notifications = (logResults || []).map((n: any) => ({
     ...n,
     read: n.status === 'read',
+    saved: savedIds.includes(n._id),
     time: new Date(n.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   }));
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
   const iconMap: any = { zone_entry: '📍', alert: '🚨', ai: '🤖', action: '⚡', work: '🏗', reply: '💬' };
 
   const onMarkAll = async () => {
@@ -901,6 +911,18 @@ const NotificationsScreen = () => {
     }
   };
 
+  const onSave = async (id: string) => {
+    const updated = savedIds.includes(id)
+      ? savedIds.filter(x => x !== id)
+      : [...savedIds, id];
+    setSavedIds(updated);
+    await AsyncStorage.setItem('saved_notifs', JSON.stringify(updated));
+    Alert.alert(
+      savedIds.includes(id) ? 'Removed' : '📌 Saved!',
+      savedIds.includes(id) ? 'Notification removed from saved.' : 'This notification has been saved for later.'
+    );
+  };
+
   const renderNotif = ({ item: n }: any) => (
     <TouchableOpacity
       style={[styles.notifCard, !n.read && styles.notifCardUnread]}
@@ -910,10 +932,34 @@ const NotificationsScreen = () => {
         <Text style={{ fontSize: 20 }}>{iconMap[n.type] || '🔔'}</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.notifTitle}>{n.title}</Text>
+        {/* Save Button — top right of content */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Text style={[styles.notifTitle, { flex: 1 }]}>{n.title}</Text>
+          <TouchableOpacity onPress={() => onSave(n._id)} style={{ padding: 4, marginLeft: 8 }}>
+            <Text style={{ fontSize: 16 }}>{n.saved ? '📌' : '🔖'}</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.notifBody}>{n.body}</Text>
 
-        {/* Accountability Details (The "Helpful" Part) */}
+        {/* Before / After Images */}
+        {(n.beforeImage || n.afterImage) && (
+          <View style={styles.beforeAfterRow}>
+            {n.beforeImage && (
+              <View style={styles.beforeAfterItem}>
+                <Text style={styles.beforeAfterLabel}>BEFORE</Text>
+                <Image source={{ uri: n.beforeImage }} style={styles.beforeAfterImg} />
+              </View>
+            )}
+            {n.afterImage && (
+              <View style={styles.beforeAfterItem}>
+                <Text style={[styles.beforeAfterLabel, { color: T.accent }]}>AFTER</Text>
+                <Image source={{ uri: n.afterImage }} style={styles.beforeAfterImg} />
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Accountability Details */}
         {(n.officialName || n.projectClaim) && (
           <View style={styles.notifDetailBox}>
             <View style={styles.notifDetailHeader}>
@@ -1078,6 +1124,95 @@ const ProfileScreen = () => {
 };
 
 // ─────────────────────────────────────────────
+// SCREEN: SETTINGS
+// ─────────────────────────────────────────────
+const SettingsScreen = () => {
+  const nav = useContext(NavContext);
+
+  const settingGroups = [
+    {
+      title: 'Notifications',
+      items: [
+        { icon: '🔔', label: 'Push Notifications', value: 'On', desc: 'Get alerted when entering civic zones' },
+        { icon: '🤖', label: 'AI Briefings', value: 'On', desc: 'Gemini-powered zone analysis' },
+        { icon: '📊', label: 'Weekly Digest', value: 'Off', desc: 'Summary of civic activity near you' },
+      ],
+    },
+    {
+      title: 'Location',
+      items: [
+        { icon: '📍', label: 'Location Access', value: 'Always', desc: 'Required for background zone detection' },
+        { icon: '🗺️', label: 'Zone Auto-detect', value: 'On', desc: 'Automatic entry/exit detection' },
+      ],
+    },
+    {
+      title: 'Privacy & Security',
+      items: [
+        { icon: '🔒', label: 'Anonymous Reports', value: 'Off', desc: 'Hide your name on public reports' },
+        { icon: '🛡️', label: 'Data on Blockchain', value: 'On', desc: 'Tamper-proof record of accountability' },
+      ],
+    },
+    {
+      title: 'About',
+      items: [
+        { icon: '🌐', label: 'Language', value: 'English' },
+        { icon: 'ℹ️', label: 'App Version', value: 'v2.1.0' },
+        { icon: '📄', label: 'Terms of Service', value: '›' },
+        { icon: '💬', label: 'Support', value: '›' },
+      ],
+    },
+  ];
+
+  return (
+    <View style={styles.screen}>
+      <View style={[styles.screenHeader, { paddingTop: STATUSBAR_H + 10 }]}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => nav.pop()}>
+          <ArrowLeft size={20} color={T.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.screenHeaderSub}>App Configuration</Text>
+          <Text style={styles.screenHeaderTitle}>Settings</Text>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: S.md, paddingBottom: 100 }}>
+        {settingGroups.map(group => (
+          <View key={group.title} style={{ marginBottom: 20 }}>
+            <SectionHeader title={group.title} />
+            <View style={{ backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, overflow: 'hidden' }}>
+              {group.items.map((s, i) => (
+                <TouchableOpacity key={s.label} style={[
+                  styles.settingRow,
+                  i < group.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: T.borderLight },
+                  { paddingHorizontal: 14 },
+                ]}>
+                  <Text style={styles.settingIcon}>{s.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>{s.label}</Text>
+                    {(s as any).desc && <Text style={{ fontSize: 11, color: T.textMute, marginTop: 1 }}>{(s as any).desc}</Text>}
+                  </View>
+                  <Text style={styles.settingValue}>{s.value}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
+
+        {/* Sign Out */}
+        <TouchableOpacity style={{
+          backgroundColor: T.dangerLight, borderRadius: 14, paddingVertical: 16,
+          alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#FECACA',
+        }} onPress={() => Alert.alert('Sign Out', 'Sign out functionality requires Clerk auth setup.')}>
+          <Text style={{ color: T.danger, fontSize: 16, fontWeight: '800' }}>Sign Out</Text>
+        </TouchableOpacity>
+
+        <Text style={{ textAlign: 'center', color: T.textMute, fontSize: 11, marginTop: 16 }}>CivicSentinel AI v2.1 • Made in India 🇮🇳</Text>
+      </ScrollView>
+    </View>
+  );
+};
+
+// ─────────────────────────────────────────────
 // TAB BAR
 // ─────────────────────────────────────────────
 const TABS = [
@@ -1135,6 +1270,7 @@ const AppContainer = () => {
         case 'Comments': return <CommentsScreen   {...currentScreen.props} />;
         case 'NewReport': return <NewReportScreen />;
         case 'ZoneDetail': return <ZoneDetailScreen {...currentScreen.props} />;
+        case 'Settings': return <SettingsScreen />;
         default: return null;
       }
     }
@@ -1418,6 +1554,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8,
   },
   chainText: { fontSize: 9, fontWeight: '800', color: T.accent },
+  beforeAfterRow: {
+    flexDirection: 'row', gap: 8, marginTop: 10,
+  },
+  beforeAfterItem: { flex: 1 },
+  beforeAfterLabel: {
+    fontSize: 9, fontWeight: '800', color: T.danger,
+    letterSpacing: 0.5, marginBottom: 4,
+  },
+  beforeAfterImg: {
+    width: '100%', height: 80, borderRadius: 8,
+    backgroundColor: T.surfaceAlt,
+  },
 
   // Profile
   profileCard: {

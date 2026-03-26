@@ -147,8 +147,10 @@ export const sendZoneEntryNotification = action({
             zoneName: args.zoneName,
             officialName: accountability?.officialName,
             projectClaim: accountability?.projectClaim,
-            advantages: accountability?.actualStatus, // We use actualStatus as a proxy for 'advantages' or we could add a specific field
+            advantages: accountability?.actualStatus,
             txHash: accountability?.txHash,
+            beforeImage: accountability?.beforeImage,
+            afterImage: accountability?.afterImage,
             sentAt: Date.now(),
             status: result?.data?.status ?? 'unknown',
         });
@@ -232,6 +234,8 @@ export const logNotification = mutation({
         projectClaim: v.optional(v.string()),
         advantages: v.optional(v.string()),
         txHash: v.optional(v.string()),
+        beforeImage: v.optional(v.string()),
+        afterImage: v.optional(v.string()),
         sentAt: v.number(),
         status: v.string(),
     },

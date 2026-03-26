@@ -213,6 +213,8 @@ export default defineSchema({
         projectClaim: v.optional(v.string()),
         advantages: v.optional(v.string()),
         txHash: v.optional(v.string()),
+        beforeImage: v.optional(v.string()),
+        afterImage: v.optional(v.string()),
         sentAt: v.number(),
         status: v.string(),
     }).index("by_userId", ["userId"]),
@@ -236,6 +238,8 @@ export default defineSchema({
         actualStatus: v.string(),
         dataHash: v.string(),       // SHA-256 hash of all fields above
         txHash: v.optional(v.string()),  // Polygon transaction hash
+        beforeImage: v.optional(v.string()),  // URL for before photo
+        afterImage: v.optional(v.string()),   // URL for after photo
         createdAt: v.number(),
     })
         .index("by_zoneId", ["zoneId"])
