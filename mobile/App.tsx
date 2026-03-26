@@ -41,6 +41,8 @@ import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ConvexProvider, ConvexReactClient, useQuery, useMutation } from 'convex/react';
 import { ConvexHttpClient } from 'convex/browser';
+import { ClerkProvider, useAuth, useUser, SignedIn, SignedOut, useSignIn, useSignUp } from '@clerk/clerk-expo';
+import * as SecureStore from 'expo-secure-store';
 import { usePushToken } from './hooks/usePushToken';
 import {
   MapPin, Bell, ThumbsUp, MessageSquare, Plus, Navigation,
@@ -48,17 +50,31 @@ import {
   LayoutDashboard, AlertTriangle, CheckCircle, Lightbulb,
   Clock, Star, Award, ArrowLeft, Camera, Filter,
   Zap, Activity, Eye, Heart, Share2, Flag, Info,
-  ChevronUp, Home, Map, Settings, RefreshCw,
+  ChevronUp, Home, Map, Settings, RefreshCw, LogIn, Mail, Lock,
 } from 'lucide-react-native';
 
 // ─────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────
 const CONVEX_URL = process.env.EXPO_PUBLIC_CONVEX_URL || "https://steady-impala-3.convex.cloud";
+const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
 const convex = new ConvexReactClient(CONVEX_URL);
 
-const MOCK_CITIZEN_ID = "user_citizen_123";
-const MOCK_CITIZEN_NAME = "Harshad P.";
+// Clerk Token Cache using SecureStore
+const tokenCache = {
+  async getToken(key: string) {
+    try { return SecureStore.getItemAsync(key); } catch { return null; }
+  },
+  async saveToken(key: string, value: string) {
+    try { await SecureStore.setItemAsync(key, value); } catch { }
+  },
+};
+
+// Auth context to pass user info down
+const AuthInfoContext = createContext<{ userId: string; userName: string }>({
+  userId: 'anonymous', userName: 'Guest',
+});
+const useAuthInfo = () => useContext(AuthInfoContext);
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -76,9 +92,10 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data: { eventType, region }, erro
   if (eventType === Location.GeofencingEventType.Enter) {
     console.log('[CivicSentinel] Entered zone in background:', region.identifier);
     try {
-      // Call Convex to log entry and trigger push notification
+      // Read the stored userId (set by the main app via AsyncStorage)
+      const storedUserId = await AsyncStorage.getItem('civicsentinel_userId') || 'anonymous';
       await convexHttpClient.mutation('notifications:logZoneEntry' as any, {
-        userId: MOCK_CITIZEN_ID,
+        userId: storedUserId,
         geoFenceId: region.identifier,
       });
     } catch (e) {
@@ -304,6 +321,7 @@ const FeedScreen = () => {
   const toggleLike = useMutation('reports:toggleLike' as any);
   const requestAction = useMutation('reports:requestAction' as any);
   const logZoneEntry = useMutation('notifications:logZoneEntry' as any);
+  const { userId: currentUserId, userName: currentUserName } = useAuthInfo();
 
   // ── Auto-trigger notification on zone entry ──
   const lastLoggedZone = useRef<string | null>(null);
@@ -312,7 +330,7 @@ const FeedScreen = () => {
       console.log(`[CivicSentinel] Entering zone: ${activeZone.name}`);
       lastLoggedZone.current = activeZone._id;
       logZoneEntry({
-        userId: MOCK_CITIZEN_ID,
+        userId: currentUserId,
         geoFenceId: activeZone._id
       }).catch(e => console.error("[CivicSentinel] Entry log failed:", e));
     } else if (!activeZone) {
@@ -381,7 +399,7 @@ const FeedScreen = () => {
         <View style={styles.reportActions}>
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => toggleLike({ reportId: r._id, userId: MOCK_CITIZEN_ID })}
+            onPress={() => toggleLike({ reportId: r._id, userId: currentUserId })}
           >
             <ThumbsUp size={15} color={T.textSub} />
             <Text style={styles.actionBtnText}>{safeLikes}</Text>
@@ -403,7 +421,7 @@ const FeedScreen = () => {
 
           <TouchableOpacity
             style={styles.takeActionBtn}
-            onPress={() => requestAction({ reportId: r._id, userId: MOCK_CITIZEN_ID })}
+            onPress={() => requestAction({ reportId: r._id, userId: currentUserId })}
           >
             <Zap size={13} color={T.primary} />
             <Text style={styles.takeActionText}>Take Action</Text>
@@ -512,7 +530,7 @@ const CommentsScreen = ({ report, zoneName }: any) => {
 
   const post = () => {
     if (!text.trim()) return;
-    setComments(prev => [{ id: Date.now().toString(), user: MOCK_CITIZEN_NAME, text, time: 'Just now' }, ...prev]);
+    setComments(prev => [{ id: Date.now().toString(), user: currentUserName, text, time: 'Just now' }, ...prev]);
     setText('');
   };
 
@@ -602,8 +620,8 @@ const NewReportScreen = () => {
     setLoading(true);
     try {
       await createReport({
-        userId: MOCK_CITIZEN_ID,
-        userName: MOCK_CITIZEN_NAME,
+        userId: currentUserId,
+        userName: currentUserName,
         geoFenceId: zones[0]._id,
         content,
         type,
@@ -873,7 +891,8 @@ const ZoneDetailScreen = ({ zone }: any) => {
 // ─────────────────────────────────────────────
 const NotificationsScreen = () => {
   const nav = useContext(NavContext);
-  const logResults = useQuery('notifications:listLogs' as any, { userId: MOCK_CITIZEN_ID });
+  const { userId: currentUserId } = useAuthInfo();
+  const logResults = useQuery('notifications:listLogs' as any, { userId: currentUserId });
   const markRead = useMutation('notifications:markRead' as any);
   const markAllRead = useMutation('notifications:markAllRead' as any);
   const [savedIds, setSavedIds] = useState<string[]>([]);
@@ -897,7 +916,7 @@ const NotificationsScreen = () => {
 
   const onMarkAll = async () => {
     try {
-      await markAllRead({ userId: MOCK_CITIZEN_ID });
+      await markAllRead({ userId: currentUserId });
     } catch (e) {
       console.error('[CivicSentinel] Mark all read failed:', e);
     }
@@ -1061,8 +1080,8 @@ const ProfileScreen = () => {
       <ScrollView contentContainerStyle={{ padding: S.md, paddingBottom: 100 }}>
         {/* Profile card */}
         <View style={styles.profileCard}>
-          <Avatar label={MOCK_CITIZEN_NAME} size={70} color={T.primary} />
-          <Text style={styles.profileName}>{MOCK_CITIZEN_NAME}</Text>
+          <Avatar label={currentUserName} size={70} color={T.primary} />
+          <Text style={styles.profileName}>{currentUserName}</Text>
           <View style={styles.profileBadge}>
             <Text style={styles.profileBadgeText}>🎖️ Civic Reporter</Text>
           </View>
@@ -1128,6 +1147,7 @@ const ProfileScreen = () => {
 // ─────────────────────────────────────────────
 const SettingsScreen = () => {
   const nav = useContext(NavContext);
+  const { signOut } = useAuth();
 
   const settingGroups = [
     {
@@ -1202,7 +1222,13 @@ const SettingsScreen = () => {
         <TouchableOpacity style={{
           backgroundColor: T.dangerLight, borderRadius: 14, paddingVertical: 16,
           alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#FECACA',
-        }} onPress={() => Alert.alert('Sign Out', 'Sign out functionality requires Clerk auth setup.')}>
+        }} onPress={async () => {
+          try {
+            await signOut();
+          } catch (err) {
+            Alert.alert('Error', 'Failed to sign out. Try again.');
+          }
+        }}>
           <Text style={{ color: T.danger, fontSize: 16, fontWeight: '800' }}>Sign Out</Text>
         </TouchableOpacity>
 
@@ -1252,9 +1278,10 @@ type NavScreen = { name: string; props: any };
 const AppContainer = () => {
   const [tab, setTab] = useState('Feed');
   const [stack, setStack] = useState<NavScreen[]>([]);
+  const { userId, userName } = useAuthInfo();
 
   // Register push notifications when app mounts
-  const { lastNotification } = usePushToken(MOCK_CITIZEN_ID);
+  const { lastNotification } = usePushToken(userId);
 
   const nav = {
     push: (name: string, props: any) => setStack(s => [...s, { name, props }]),
@@ -1302,13 +1329,129 @@ const AppContainer = () => {
   );
 };
 
+// ─────────────────────────────────────────────
+// LOGIN SCREEN (Clerk)
+// ─────────────────────────────────────────────
+const LoginScreen = () => {
+  const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
+  const { signUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const onSubmit = async () => {
+    if (!email || !password) { setError('Please fill both fields.'); return; }
+    setLoading(true); setError('');
+    try {
+      if (isSignUp) {
+        if (!signUpLoaded) return;
+        const result = await signUp.create({ emailAddress: email, password });
+        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+        // For simplicity, auto-complete (in production, add OTP screen)
+        Alert.alert('Check Email', 'We sent a verification code to ' + email + '. For demo, your account is being created.');
+        if (result.status === 'complete') {
+          await setSignUpActive({ session: result.createdSessionId });
+        }
+      } else {
+        if (!signInLoaded) return;
+        const result = await signIn.create({ identifier: email, password });
+        if (result.status === 'complete') {
+          await setSignInActive({ session: result.createdSessionId });
+        }
+      }
+    } catch (err: any) {
+      setError(err?.errors?.[0]?.longMessage || err?.message || 'Authentication failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View style={[styles.screen, { justifyContent: 'center', padding: S.xl }]}>
+      <View style={{ alignItems: 'center', marginBottom: 40 }}>
+        <Text style={{ fontSize: 42 }}>🏙️</Text>
+        <Text style={{ fontSize: 28, fontWeight: '900', color: T.text, marginTop: 12 }}>CivicSentinel</Text>
+        <Text style={{ fontSize: 14, color: T.textMute, marginTop: 4 }}>AI-Powered Civic Accountability</Text>
+      </View>
+
+      <View style={{ backgroundColor: T.surface, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: T.border }}>
+        <Text style={{ fontSize: 18, fontWeight: '800', color: T.text, marginBottom: 20 }}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, marginBottom: 12, borderWidth: 1, borderColor: T.border }}>
+          <Mail size={18} color={T.textMute} />
+          <TextInput
+            style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, fontSize: 15, color: T.text }}
+            placeholder="Email" placeholderTextColor={T.textMute}
+            value={email} onChangeText={setEmail}
+            keyboardType="email-address" autoCapitalize="none"
+          />
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, marginBottom: 16, borderWidth: 1, borderColor: T.border }}>
+          <Lock size={18} color={T.textMute} />
+          <TextInput
+            style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, fontSize: 15, color: T.text }}
+            placeholder="Password" placeholderTextColor={T.textMute}
+            value={password} onChangeText={setPassword}
+            secureTextEntry
+          />
+        </View>
+
+        {error ? <Text style={{ color: T.danger, fontSize: 12, marginBottom: 10 }}>{error}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+          onPress={onSubmit} disabled={loading}
+        >
+          {loading
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={styles.submitBtnText}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>
+          }
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => { setIsSignUp(!isSignUp); setError(''); }} style={{ marginTop: 16, alignItems: 'center' }}>
+          <Text style={{ color: T.primary, fontWeight: '600', fontSize: 14 }}>
+            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
 export default function App() {
   return (
-    <ConvexProvider client={convex}>
-      <AppContainer />
-    </ConvexProvider>
+    <ClerkProvider publishableKey={CLERK_KEY} tokenCache={tokenCache}>
+      <ConvexProvider client={convex}>
+        <SignedIn>
+          <AuthenticatedApp />
+        </SignedIn>
+        <SignedOut>
+          <LoginScreen />
+        </SignedOut>
+      </ConvexProvider>
+    </ClerkProvider>
   );
 }
+
+const AuthenticatedApp = () => {
+  const { user } = useUser();
+  const userId = user?.id || 'anonymous';
+  const userName = user?.firstName ? `${user.firstName} ${user.lastName?.[0] || ''}.` : (user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || 'Citizen');
+
+  // Persist userId for the background geofence task
+  useEffect(() => {
+    AsyncStorage.setItem('civicsentinel_userId', userId);
+  }, [userId]);
+
+  return (
+    <AuthInfoContext.Provider value={{ userId, userName }}>
+      <AppContainer />
+    </AuthInfoContext.Provider>
+  );
+};
 
 // ─────────────────────────────────────────────
 // STYLES — Fully responsive
