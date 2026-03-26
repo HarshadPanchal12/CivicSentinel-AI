@@ -9,16 +9,18 @@ import { useMutation } from 'convex/react';
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
         shouldShowAlert: true,
-        shouldPlaySound: false, // <-- set false based on Claude's tip
+        shouldPlaySound: false,
         shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
     }),
 });
 
 export const usePushToken = (userId: string) => {
     const [token, setToken] = useState<string | null>(null);
     const [notif, setNotif] = useState<any>(null);
-    const notifListener = useRef<any>();
-    const responseListener = useRef<any>();
+    const notifListener = useRef<any>(null);
+    const responseListener = useRef<any>(null);
 
     // Convex mutation to save token
     const saveToken = useMutation('notifications:savePushToken' as any);

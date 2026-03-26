@@ -9,10 +9,22 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CONVEX_URL": "https://steady-impala-3.convex.cloud",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZW5vdWdoLXBlcmNoLTMzLmNsZXJrLmFjY291bnRzLmRldiQ",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "NODE_OPTIONS": "--max_old_space_size=4096"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_CONVEX_URL": "https://steady-impala-3.convex.cloud",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZW5vdWdoLXBlcmNoLTMzLmNsZXJrLmFjY291bnRzLmRldiQ",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "NODE_OPTIONS": "--max_old_space_size=4096"
+      }
     }
   },
   "submit": {

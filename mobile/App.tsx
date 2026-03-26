@@ -40,7 +40,7 @@ import Svg, { Circle, Path, G, Rect, Text as TextSvg } from 'react-native-svg';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ConvexProvider, ConvexReactClient, useQuery, useMutation } from 'convex/react';
+import { ConvexProvider, ConvexReactClient, useQuery, useMutation, useAction } from 'convex/react';
 import { ConvexHttpClient } from 'convex/browser';
 import { ClerkProvider, useAuth, useUser, SignedIn, SignedOut, useSignIn, useSignUp } from '@clerk/clerk-expo';
 import * as SecureStore from 'expo-secure-store';
@@ -523,6 +523,7 @@ const FeedScreen = () => {
 // ─────────────────────────────────────────────
 const CommentsScreen = ({ report, zoneName }: any) => {
   const nav = useContext(NavContext);
+  const { userName: currentUserName } = useAuthInfo();
   const [text, setText] = useState('');
   const [comments, setComments] = useState([
     { id: '1', user: 'Priya S.', text: 'I saw this too! Very dangerous.', time: '2 min ago' },
@@ -600,6 +601,7 @@ const CommentsScreen = ({ report, zoneName }: any) => {
 // ─────────────────────────────────────────────
 const NewReportScreen = () => {
   const nav = useContext(NavContext);
+  const { userId: currentUserId, userName: currentUserName } = useAuthInfo();
   const zones = useQuery('geoFences:listActive' as any);
   const createReport = useMutation('reports:create' as any);
 
@@ -1098,6 +1100,7 @@ const NotificationsScreen = () => {
 // ─────────────────────────────────────────────
 const ProfileScreen = () => {
   const nav = useContext(NavContext);
+  const { userName: currentUserName } = useAuthInfo();
   const zones = useQuery('geoFences:listActive' as any);
 
   const badges = [
@@ -1389,7 +1392,7 @@ const RAGChatModal = () => {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const chatAction = useMutation('ragAgent:chat' as any);
+  const performChat = useAction('ragAgent:chat' as any);
   const flatRef = useRef<FlatList>(null);
 
   const onSend = async () => {
@@ -1407,8 +1410,7 @@ const RAGChatModal = () => {
         content: m.text,
       }));
 
-      const httpClient = new ConvexHttpClient(CONVEX_URL);
-      const answer = await httpClient.action('ragAgent:chat' as any, {
+      const answer = await performChat({
         question: q,
         history,
       });
