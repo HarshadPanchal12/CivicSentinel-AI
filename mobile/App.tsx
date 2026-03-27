@@ -523,17 +523,27 @@ const FeedScreen = () => {
 // ─────────────────────────────────────────────
 const CommentsScreen = ({ report, zoneName }: any) => {
   const nav = useContext(NavContext);
-  const { userName: currentUserName } = useAuthInfo();
+  const { userName: currentUserName, userId: currentUserId } = useAuthInfo();
   const [text, setText] = useState('');
-  const [comments, setComments] = useState([
-    { id: '1', user: 'Priya S.', text: 'I saw this too! Very dangerous.', time: '2 min ago' },
-    { id: '2', user: 'Rahul M.', text: 'Complained to ward office already.', time: '15 min ago' },
-  ]);
 
-  const post = () => {
-    if (!text.trim()) return;
-    setComments(prev => [{ id: Date.now().toString(), user: currentUserName, text, time: 'Just now' }, ...prev]);
-    setText('');
+  const comments = useQuery('comments:listByReport' as any, { reportId: report?._id }) || [];
+  const createComment = useMutation('comments:create' as any);
+
+  const post = async () => {
+    if (!text.trim() || !report?._id) return;
+    const currentText = text;
+    setText(''); // optimistic clear
+    try {
+      await createComment({
+        reportId: report._id,
+        userId: currentUserId,
+        userName: currentUserName,
+        text: currentText,
+      });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to post reply.');
+    }
   };
 
   return (
@@ -561,16 +571,16 @@ const CommentsScreen = ({ report, zoneName }: any) => {
 
       <FlatList
         data={comments}
-        keyExtractor={c => c.id}
+        keyExtractor={c => c._id}
         contentContainerStyle={{ padding: S.md }}
         ListHeaderComponent={<SectionHeader title={`${comments.length} Replies`} />}
         renderItem={({ item: c }) => (
           <View style={styles.commentCard}>
-            <Avatar label={c.user} size={32} color={T.accent} />
+            <Avatar label={c.userName} size={32} color={T.accent} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={[styles.reportUser, { fontSize: 13 }]}>{c.user}</Text>
-                <Text style={styles.reportMeta}>{c.time}</Text>
+                <Text style={[styles.reportUser, { fontSize: 13 }]}>{c.userName}</Text>
+                <Text style={styles.reportMeta}>Recent</Text>
               </View>
               <Text style={[styles.reportContent, { marginBottom: 0 }]}>{c.text}</Text>
             </View>
@@ -603,6 +613,7 @@ const NewReportScreen = () => {
   const nav = useContext(NavContext);
   const { userId: currentUserId, userName: currentUserName } = useAuthInfo();
   const zones = useQuery('geoFences:listActive' as any);
+  const { zone: activeZone } = useGPS(zones);
   const createReport = useMutation('reports:create' as any);
 
   const [type, setType] = useState('issue');
@@ -619,13 +630,13 @@ const NewReportScreen = () => {
 
   const submit = async () => {
     if (!content.trim()) { Alert.alert('Missing Info', 'Please describe the issue.'); return; }
-    if (!zones?.length) { Alert.alert('Error', 'No zones found.'); return; }
+    if (!activeZone?._id) { Alert.alert('Error', 'No active zone found nearby.'); return; }
     setLoading(true);
     try {
       await createReport({
         userId: currentUserId,
         userName: currentUserName,
-        geoFenceId: zones[0]._id,
+        geoFenceId: activeZone._id,
         content,
         type,
       });
@@ -651,10 +662,10 @@ const NewReportScreen = () => {
 
       <ScrollView contentContainerStyle={{ padding: S.md }} showsVerticalScrollIndicator={false}>
         {/* Zone info */}
-        {zones?.[0] && (
+        {activeZone && (
           <View style={styles.formZoneBadge}>
             <MapPin size={13} color={T.primary} />
-            <Text style={styles.formZoneText}>Reporting for: {String(zones[0].name || 'Current Zone')}</Text>
+            <Text style={styles.formZoneText}>Reporting for: {String(activeZone.name || 'Current Zone')}</Text>
           </View>
         )}
 
@@ -1620,8 +1631,8 @@ const LoginScreen = () => {
         if (!signUpLoaded) return;
         // Split email prefix for a default name
         const displayName = email.split('@')[0];
-        await signUp.create({ 
-          emailAddress: email, 
+        await signUp.create({
+          emailAddress: email,
           password,
           firstName: displayName,
           lastName: 'User'
@@ -1643,34 +1654,60 @@ const LoginScreen = () => {
   };
 
   const onVerify = async () => {
-    if (!code) { setError('Please enter the verification code.'); return; }
+    if (!code.trim()) { setError('Please enter the verification code.'); return; }
+    if (!signUpLoaded) return;
     setLoading(true); setError('');
+
     try {
-      if (!signUpLoaded) return;
-      console.log('[Clerk] Attempting verification for:', email);
-      const result = await signUp.attemptEmailAddressVerification({ code });
-      
-      console.log('[Clerk] Verification result status:', result.status);
-      
+      const result = await signUp.attemptEmailAddressVerification({ code: code.trim() });
+
+      // ✅ Handle complete — the happy path
       if (result.status === 'complete') {
-        console.log('[Clerk] Sign-up complete, activating session...');
         await setSignUpActive({ session: result.createdSessionId });
-      } else {
-        // If status is "missing_requirements", list them if available
-        const missing = result.missingFields || [];
-        setError(`Verification ${result.status}. Missing: ${missing.join(', ') || 'unknown attributes'}`);
-        console.warn('[Clerk] Incomplete sign-up:', result);
+        return;
       }
+
+      // ✅ Handle missing_requirements
+      if (result.status === 'missing_requirements') {
+        if (result.createdSessionId) {
+          await setSignUpActive({ session: result.createdSessionId });
+          return;
+        }
+        try {
+          const updated = await signUp.update({ lastName: 'User' });
+          if (updated.status === 'complete') {
+            await setSignUpActive({ session: updated.createdSessionId });
+            return;
+          }
+        } catch {
+          // fallback below
+        }
+        setError('Sign-up incomplete. Please try again.');
+        return;
+      }
+
+      setError(`Verification status: ${result.status}. Please try again.`);
+
     } catch (err: any) {
-      console.error('[Clerk] Verification error:', err);
       const msg = err?.errors?.[0]?.longMessage || err?.message || 'Verification failed.';
+
+      // ✅ "already_verified" means Clerk verified it but we never set the session
       if (msg.includes('already_verified') || msg.includes('has already been verified')) {
-        setError('Email already verified! Please try to Sign In now.');
-        setIsVerifying(false);
-        setIsSignUp(false);
-      } else {
-        setError(msg);
+        try {
+          if (!signInLoaded) return;
+          const signInResult = await signIn.create({ identifier: email, password });
+          if (signInResult.status === 'complete') {
+            await setSignInActive({ session: signInResult.createdSessionId });
+            return;
+          }
+        } catch {
+          setError('Email verified! Please use the Sign In button below.');
+          setIsVerifying(false);
+          setIsSignUp(false);
+          return;
+        }
       }
+      setError(msg);
     } finally {
       setLoading(false);
     }

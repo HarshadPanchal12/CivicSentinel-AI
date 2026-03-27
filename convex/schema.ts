@@ -184,6 +184,17 @@ export default defineSchema({
         .index("by_reportId", ["reportId"])
         .index("by_userId", ["userId"]),
 
+    // ====== COMMENTS ======
+    comments: defineTable({
+        reportId: v.id("reports"),
+        userId: v.string(),
+        userName: v.string(),
+        text: v.string(),
+        createdAt: v.number(),
+    })
+        .index("by_reportId", ["reportId"])
+        .index("by_userId", ["userId"]),
+
     pushTokens: defineTable({
         userId: v.string(),
         pushToken: v.string(),
