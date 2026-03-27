@@ -1631,11 +1631,13 @@ const LoginScreen = () => {
         if (!signUpLoaded) return;
         // Split email prefix for a default name
         const displayName = email.split('@')[0];
+        const uniqueSuffix = Math.floor(Math.random() * 10000);
         await signUp.create({
           emailAddress: email,
           password,
           firstName: displayName,
-          lastName: 'User'
+          lastName: 'User',
+          username: `${displayName}${uniqueSuffix}`
         });
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
         setIsVerifying(true);
@@ -1674,7 +1676,12 @@ const LoginScreen = () => {
           return;
         }
         try {
-          const updated = await signUp.update({ lastName: 'User' });
+          const displayName = email.split('@')[0];
+          const uniqueSuffix = Math.floor(Math.random() * 10000);
+          const updated = await signUp.update({
+            lastName: 'User',
+            username: `${displayName}${uniqueSuffix}`
+          });
           if (updated.status === 'complete') {
             await setSignUpActive({ session: updated.createdSessionId });
             return;
