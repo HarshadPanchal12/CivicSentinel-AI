@@ -1618,7 +1618,14 @@ const LoginScreen = () => {
     try {
       if (isSignUp) {
         if (!signUpLoaded) return;
-        await signUp.create({ emailAddress: email, password });
+        // Split email prefix for a default name
+        const displayName = email.split('@')[0];
+        await signUp.create({ 
+          emailAddress: email, 
+          password,
+          firstName: displayName,
+          lastName: 'User'
+        });
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
         setIsVerifying(true);
       } else {
@@ -1640,14 +1647,30 @@ const LoginScreen = () => {
     setLoading(true); setError('');
     try {
       if (!signUpLoaded) return;
+      console.log('[Clerk] Attempting verification for:', email);
       const result = await signUp.attemptEmailAddressVerification({ code });
+      
+      console.log('[Clerk] Verification result status:', result.status);
+      
       if (result.status === 'complete') {
+        console.log('[Clerk] Sign-up complete, activating session...');
         await setSignUpActive({ session: result.createdSessionId });
       } else {
-        setError('Verification incomplete. Status: ' + result.status);
+        // If status is "missing_requirements", list them if available
+        const missing = result.missingFields || [];
+        setError(`Verification ${result.status}. Missing: ${missing.join(', ') || 'unknown attributes'}`);
+        console.warn('[Clerk] Incomplete sign-up:', result);
       }
     } catch (err: any) {
-      setError(err?.errors?.[0]?.longMessage || err?.message || 'Verification failed.');
+      console.error('[Clerk] Verification error:', err);
+      const msg = err?.errors?.[0]?.longMessage || err?.message || 'Verification failed.';
+      if (msg.includes('already_verified') || msg.includes('has already been verified')) {
+        setError('Email already verified! Please try to Sign In now.');
+        setIsVerifying(false);
+        setIsSignUp(false);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
