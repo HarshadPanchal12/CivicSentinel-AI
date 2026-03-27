@@ -1607,6 +1607,8 @@ const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -1616,13 +1618,9 @@ const LoginScreen = () => {
     try {
       if (isSignUp) {
         if (!signUpLoaded) return;
-        const result = await signUp.create({ emailAddress: email, password });
+        await signUp.create({ emailAddress: email, password });
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        // For simplicity, auto-complete (in production, add OTP screen)
-        Alert.alert('Check Email', 'We sent a verification code to ' + email + '. For demo, your account is being created.');
-        if (result.status === 'complete') {
-          await setSignUpActive({ session: result.createdSessionId });
-        }
+        setIsVerifying(true);
       } else {
         if (!signInLoaded) return;
         const result = await signIn.create({ identifier: email, password });
@@ -1637,6 +1635,24 @@ const LoginScreen = () => {
     }
   };
 
+  const onVerify = async () => {
+    if (!code) { setError('Please enter the verification code.'); return; }
+    setLoading(true); setError('');
+    try {
+      if (!signUpLoaded) return;
+      const result = await signUp.attemptEmailAddressVerification({ code });
+      if (result.status === 'complete') {
+        await setSignUpActive({ session: result.createdSessionId });
+      } else {
+        setError('Verification incomplete. Status: ' + result.status);
+      }
+    } catch (err: any) {
+      setError(err?.errors?.[0]?.longMessage || err?.message || 'Verification failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={[styles.screen, { justifyContent: 'center', padding: S.xl }]}>
       <View style={{ alignItems: 'center', marginBottom: 40 }}>
@@ -1646,43 +1662,69 @@ const LoginScreen = () => {
       </View>
 
       <View style={{ backgroundColor: T.surface, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: T.border }}>
-        <Text style={{ fontSize: 18, fontWeight: '800', color: T.text, marginBottom: 20 }}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>
+        <Text style={{ fontSize: 18, fontWeight: '800', color: T.text, marginBottom: 20 }}>
+          {isVerifying ? 'Verify Email' : (isSignUp ? 'Create Account' : 'Sign In')}
+        </Text>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, marginBottom: 12, borderWidth: 1, borderColor: T.border }}>
-          <Mail size={18} color={T.textMute} />
-          <TextInput
-            style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, fontSize: 15, color: T.text }}
-            placeholder="Email" placeholderTextColor={T.textMute}
-            value={email} onChangeText={setEmail}
-            keyboardType="email-address" autoCapitalize="none"
-          />
-        </View>
+        {!isVerifying ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, marginBottom: 12, borderWidth: 1, borderColor: T.border }}>
+              <Mail size={18} color={T.textMute} />
+              <TextInput
+                style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, fontSize: 15, color: T.text }}
+                placeholder="Email" placeholderTextColor={T.textMute}
+                value={email} onChangeText={setEmail}
+                keyboardType="email-address" autoCapitalize="none"
+              />
+            </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, marginBottom: 16, borderWidth: 1, borderColor: T.border }}>
-          <Lock size={18} color={T.textMute} />
-          <TextInput
-            style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, fontSize: 15, color: T.text }}
-            placeholder="Password" placeholderTextColor={T.textMute}
-            value={password} onChangeText={setPassword}
-            secureTextEntry
-          />
-        </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, marginBottom: 16, borderWidth: 1, borderColor: T.border }}>
+              <Lock size={18} color={T.textMute} />
+              <TextInput
+                style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, fontSize: 15, color: T.text }}
+                placeholder="Password" placeholderTextColor={T.textMute}
+                value={password} onChangeText={setPassword}
+                secureTextEntry
+              />
+            </View>
+          </>
+        ) : (
+          <View style={{ marginBottom: 20 }}>
+            <Text style={{ fontSize: 13, color: T.textSub, marginBottom: 12 }}>Enter the 6-digit code sent to {email}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: T.border }}>
+              <ShieldCheck size={18} color={T.textMute} />
+              <TextInput
+                style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, fontSize: 18, fontWeight: 'bold', letterSpacing: 4, color: T.primary }}
+                placeholder="000000" placeholderTextColor={T.textMute}
+                value={code} onChangeText={setCode}
+                keyboardType="number-pad" maxLength={6}
+              />
+            </View>
+          </View>
+        )}
 
         {error ? <Text style={{ color: T.danger, fontSize: 12, marginBottom: 10 }}>{error}</Text> : null}
 
         <TouchableOpacity
           style={[styles.submitBtn, loading && { opacity: 0.6 }]}
-          onPress={onSubmit} disabled={loading}
+          onPress={isVerifying ? onVerify : onSubmit} disabled={loading}
         >
           {loading
             ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.submitBtnText}>{isSignUp ? 'Create Account' : 'Sign In'}</Text>
+            : <Text style={styles.submitBtnText}>{isVerifying ? 'Verify Now' : (isSignUp ? 'Create Account' : 'Sign In')}</Text>
           }
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => { setIsSignUp(!isSignUp); setError(''); }} style={{ marginTop: 16, alignItems: 'center' }}>
+        <TouchableOpacity
+          onPress={() => {
+            if (isVerifying) { setIsVerifying(false); }
+            else { setIsSignUp(!isSignUp); }
+            setError('');
+          }}
+          style={{ marginTop: 16, alignItems: 'center' }}
+        >
           <Text style={{ color: T.primary, fontWeight: '600', fontSize: 14 }}>
-            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            {isVerifying ? 'Back to Sign Up' : (isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up")}
           </Text>
         </TouchableOpacity>
       </View>
