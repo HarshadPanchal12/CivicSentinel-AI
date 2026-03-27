@@ -176,7 +176,7 @@ export default function CommandCenterScene() {
                 if (!project.location) return null;
                 const pos = mapTo3D(project.location.lat, project.location.lng);
                 // Color code by status
-                const color = project.status === 'active' || project.status === 'in_progress' ? '#00d4ff' : '#22c55e';
+                const color = project.status === 'in_progress' ? '#00d4ff' : '#22c55e';
                 return <GeoZone key={project._id} position={pos} radius={0.8} color={color} label={project.name} />
             })}
 
