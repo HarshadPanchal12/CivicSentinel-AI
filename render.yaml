@@ -19,7 +19,7 @@ services:
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         value: pk_test_bmF0aW9uYWwteWFrLTk2LmNsZXJrLmFjY291bnRzLmRldiQ
       - key: CLERK_SECRET_KEY
-        generateValue: true # Or provide your secret here, but it's safer to add it in Render UI
+        sync: false # Add this in Render Dashboard for security
       - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
         value: /sign-in
       - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
@@ -29,14 +29,14 @@ services:
       - key: NEO4J_USERNAME
         value: "1695dc0e"
       - key: NEO4J_PASSWORD
-        value: "KaPXmDgGChzlfKh5BrLxPVzpikoqm8HCx9iUfsh9CzE"
+        sync: false # Add this in Render Dashboard
       - key: NEXT_PUBLIC_GEOAPIFY_API_KEY
-        value: fe85ac95fe3c47728f479e1c5700b66d
+        sync: false # Add this in Render Dashboard
       - key: NEXT_PUBLIC_OLA_MAPS_API_KEY
-        value: I9WIdMwHBP8Ev1RlNnipBtVhxWssimcw6nAB8CUu
+        sync: false # Add this in Render Dashboard
       - key: OGD_API_KEY
-        value: 579b464db66ec23bdd0000015a25788de4c440c95a516210ac4e1c2d
+        sync: false # Add this in Render Dashboard
       - key: GEMINI_API_KEY
-        value: AIzaSyAAi3HBS0tsmpAc-DaB_Z9zJnlem2v3_lo
+        sync: false # Add this in Render Dashboard
       - key: GOAPIFY_WEBHOOK_SECRET
-        value: your_secret_here
+        sync: false # Add this in Render Dashboard
