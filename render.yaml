@@ -1,0 +1,42 @@
+# Render Blueprint for CivicSentinel Website
+# This configuration deploys the Next.js web application to Render's Free tier.
+
+services:
+  - type: web
+    name: civicsentinel-web
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    branch: main
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NEXT_PUBLIC_CONVEX_URL
+        value: https://steady-impala-3.convex.cloud
+      - key: NEXT_PUBLIC_CONVEX_SITE_URL
+        value: https://steady-impala-3.convex.site
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        value: pk_test_bmF0aW9uYWwteWFrLTk2LmNsZXJrLmFjY291bnRzLmRldiQ
+      - key: CLERK_SECRET_KEY
+        generateValue: true # Or provide your secret here, but it's safer to add it in Render UI
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        value: /sign-in
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        value: /sign-up
+      - key: NEO4J_URI
+        value: neo4j+s://1695dc0e.databases.neo4j.io
+      - key: NEO4J_USERNAME
+        value: "1695dc0e"
+      - key: NEO4J_PASSWORD
+        value: "KaPXmDgGChzlfKh5BrLxPVzpikoqm8HCx9iUfsh9CzE"
+      - key: NEXT_PUBLIC_GEOAPIFY_API_KEY
+        value: fe85ac95fe3c47728f479e1c5700b66d
+      - key: NEXT_PUBLIC_OLA_MAPS_API_KEY
+        value: I9WIdMwHBP8Ev1RlNnipBtVhxWssimcw6nAB8CUu
+      - key: OGD_API_KEY
+        value: 579b464db66ec23bdd0000015a25788de4c440c95a516210ac4e1c2d
+      - key: GEMINI_API_KEY
+        value: AIzaSyAAi3HBS0tsmpAc-DaB_Z9zJnlem2v3_lo
+      - key: GOAPIFY_WEBHOOK_SECRET
+        value: your_secret_here
